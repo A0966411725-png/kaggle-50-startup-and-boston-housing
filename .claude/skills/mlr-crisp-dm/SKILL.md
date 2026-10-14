@@ -73,5 +73,7 @@ way. Every number the site shows is recomputed in the browser by
   the same algorithms (lasso/enet path entry order, RFE on standardised X,
   SelectKBest F-test, Backward by smallest |t|, forward & exhaustive search,
   KFold(5) without shuffle, RESET with powers 2–3 of the standardised fitted
-  values, Durbin–Watson in the original row order).
+  values, Durbin–Watson in the original row order, and the recommended-model
+  tie rule: methods are scanned in `METHOD_ORDER` and only a strictly lower
+  RMSE (by more than 1e-12) replaces the current best).
 - Exhaustive search is skipped when p > 16.

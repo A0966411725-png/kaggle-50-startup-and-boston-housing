@@ -21,7 +21,7 @@
   function parseCSV(text) {
     const rows = [];
     let row = [], field = "", inQ = false, i = 0;
-    text = text.replace(/^﻿/, "");
+    text = text.replace(/^\uFEFF/, "");
     const delim = sniffDelimiter(text);
     while (i < text.length) {
       const c = text[i];
@@ -41,7 +41,15 @@
     if (field !== "" || row.length) { row.push(field); rows.push(row); }
     const nonEmpty = rows.filter(r => r.length > 1 || (r[0] || "").trim() !== "");
     if (nonEmpty.length < 2) throw new Error("CSV 至少需要標題列和一列資料");
-    const header = nonEmpty[0].map(h => h.trim());
+    // pandas-style header clean-up: blank names -> "Unnamed: j", duplicates -> "name.1", "name.2"
+    const seen = new Map();
+    const header = nonEmpty[0].map((h, j) => {
+      let name = h.trim() || `Unnamed: ${j}`;
+      const base = name;
+      while (seen.has(name)) { seen.set(base, seen.get(base) + 1); name = `${base}.${seen.get(base)}`; }
+      seen.set(name, 0);
+      return name;
+    });
     const body = nonEmpty.slice(1).filter(r => r.length === header.length);
     return { header, rows: body, skipped: nonEmpty.length - 1 - body.length };
   }
@@ -129,7 +137,9 @@
       if (norm0 < 1e-12) { dropped.push({ name: prep.names[j], reason: "常數欄位" }); continue; }
       for (const b of basis) { const d = dot(v, b); for (let i = 0; i < v.length; i++) v[i] -= d * b[i]; }
       const norm = Math.sqrt(dot(v, v));
-      if (norm / norm0 < 1e-8) { dropped.push({ name: prep.names[j], reason: "完全共線" }); continue; }
+      // stricter than the Cholesky skip rule (ratio² < 1e-10) so every subset of
+      // the kept columns stays full rank and inference() never sees a skipped column
+      if (norm / norm0 < 1e-4) { dropped.push({ name: prep.names[j], reason: "完全共線" }); continue; }
       for (let i = 0; i < v.length; i++) v[i] /= norm;
       basis.push(v); keep.push(j);
     }

@@ -167,21 +167,21 @@ Mutual information ranking: lstat (0.667), rm (0.511), ptratio (0.483), indus (0
 
 - Backward elimination (p-value, lecture L6): every coefficient has p < 0.05 at k = 10.
 - Lecture-style choice (min **test** RMSE): `exhaustive_test` k=8 ['zn', 'nox', 'age', 'dis', 'rad', 'tax', 'ptratio', 'lstat'] → test RMSE $4.54k, R² 0.7191.
-- Leakage-free choice (min **5-fold CV** RMSE on training only): `exhaustive_cv` k=10 ['crim', 'chas', 'nox', 'rm', 'dis', 'rad', 'tax', 'ptratio', 'b', 'lstat'] → test RMSE $5.05k, R² 0.6523.
+- Leakage-free choice (min **5-fold CV** RMSE on training only): `forward_cv` k=10 ['lstat', 'rm', 'ptratio', 'dis', 'nox', 'b', 'chas', 'crim', 'rad', 'tax'] → test RMSE $5.05k, R² 0.6523.
 
 | term | coef | std err | t | p | 95% CI | VIF |
 |---|---|---|---|---|---|---|
 | const | 30.9311 | 5.6631 | 5.462 | 8.374e-08 | [19.797, 42.065] | – |
-| crim | -0.1086 | 0.0347 | -3.130 | 0.001881 | [-0.177, -0.040] | 1.70 |
-| chas | 2.8752 | 0.9511 | 3.023 | 0.002667 | [1.005, 4.745] | 1.08 |
-| nox | -17.9539 | 3.9099 | -4.592 | 5.923e-06 | [-25.641, -10.267] | 3.80 |
+| lstat | -0.5102 | 0.0530 | -9.618 | 8.334e-20 | [-0.615, -0.406] | 2.55 |
 | rm | 4.4637 | 0.4474 | 9.976 | 4.828e-21 | [3.584, 5.343] | 1.81 |
+| ptratio | -1.0122 | 0.1326 | -7.632 | 1.768e-13 | [-1.273, -0.751] | 1.57 |
 | dis | -1.2350 | 0.1793 | -6.886 | 2.281e-11 | [-1.588, -0.882] | 2.62 |
+| nox | -17.9539 | 3.9099 | -4.592 | 5.923e-06 | [-25.641, -10.267] | 3.80 |
+| b | 0.0123 | 0.0030 | 4.144 | 4.18e-05 | [0.006, 0.018] | 1.32 |
+| chas | 2.8752 | 0.9511 | 3.023 | 0.002667 | [1.005, 4.745] | 1.08 |
+| crim | -0.1086 | 0.0347 | -3.130 | 0.001881 | [-0.177, -0.040] | 1.70 |
 | rad | 0.2381 | 0.0732 | 3.252 | 0.001243 | [0.094, 0.382] | 7.09 |
 | tax | -0.0078 | 0.0038 | -2.062 | 0.0399 | [-0.015, -0.000] | 7.08 |
-| ptratio | -1.0122 | 0.1326 | -7.632 | 1.768e-13 | [-1.273, -0.751] | 1.57 |
-| b | 0.0123 | 0.0030 | 4.144 | 4.18e-05 | [0.006, 0.018] | 1.32 |
-| lstat | -0.5102 | 0.0530 | -9.618 | 8.334e-20 | [-0.615, -0.406] | 2.55 |
 
 R² (train) 0.7483, adj. R² 0.7419, F(10, 393) = 116.84 (p = 3.85e-111); Ramsey RESET F = 74.23 (p = 4.7e-28); Durbin–Watson (original row order) 1.089; Jarque–Bera p 1.89e-124; Breusch–Pagan p 2.93e-08.
 

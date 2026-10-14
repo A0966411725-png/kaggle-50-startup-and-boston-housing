@@ -237,6 +237,7 @@
     $("csv-file").addEventListener("change", async e => {
       const f = e.target.files[0];
       if (!f) return;
+      e.target.value = ""; // so choosing the same file again still fires "change"
       customLoaded(await f.text(), f.name, null);
     });
     $("drop-chips").addEventListener("click", e => {
@@ -339,6 +340,7 @@
     status("分析中…");
     setTimeout(() => {
       try {
+        if (seed > 4294967295) throw new Error("random_state 必須介於 0 和 4294967295 之間");
         const drop = [...state.customDrop].filter(c => c !== target);
         let prep = MLR.prepare(table, { target, drop });
         if (prep.n < 10) throw new Error(`去除缺失值後只剩 ${prep.n} 列，資料太少`);
@@ -375,6 +377,9 @@
     if (!C) return;
     const P = C.problem;
     $("problem").value = C.custom ? "custom" : C.id;
+    const src = $("source-link");
+    src.textContent = C.source.url ? `資料來源：${C.source.name}` : "";
+    if (C.source.url) src.href = C.source.url; else src.removeAttribute("href");
 
     // method chips
     document.querySelectorAll("#methods [data-m]").forEach(b => {
@@ -610,8 +615,8 @@
 
   function renderScatter(model) {
     const preds = state.cur.problem.testPredictions(model.row.cols);
-    const lo = Math.min(...preds.map(p => Math.min(p.actual, p.pred)));
-    const hi = Math.max(...preds.map(p => Math.max(p.actual, p.pred)));
+    let lo = Infinity, hi = -Infinity;
+    for (const p of preds) { lo = Math.min(lo, p.actual, p.pred); hi = Math.max(hi, p.actual, p.pred); }
     const c1 = css("--s1"), muted = css("--muted");
     $("scatter-legend").innerHTML = legendHTML([["測試樣本", c1], ["完美預測 y = x", muted, "dash"]]);
     const opts = baseOptions(`預測值（${state.cur.target}）`);
@@ -662,10 +667,13 @@
     $("coef-table").innerHTML = `<thead>${head}</thead><tbody>${body}</tbody>`;
     let foot = `訓練集 n = ${inf.n_train}；殘差標準誤 σ̂ = ${fmtU(inf.sigma)}；p < 0.05 視為顯著。`;
     const B = state.cur.bundle;
-    if (B && sameArray(B.inference.features, inf.features)) {
-      const maxRel = Math.max(...inf.coefficients.map((c, i) => {
-        const r = B.inference.coefficients[i];
-        return Math.max(Math.abs(c.coef - r.coef) / Math.abs(r.coef), Math.abs(c.se - r.se) / r.se, Math.abs(c.p - r.p) / Math.max(r.p, 1e-300) * (r.p > 1e-12 ? 1 : 0));
+    const sameSet = B && B.inference.features.length === inf.features.length &&
+      B.inference.features.every(f => inf.features.includes(f));
+    if (sameSet) {
+      const byName = Object.fromEntries(B.inference.coefficients.map(c => [c.name, c]));
+      const maxRel = Math.max(...inf.coefficients.map(c => {
+        const r = byName[c.name];
+        return Math.max(Math.abs(c.coef - r.coef) / Math.abs(r.coef), Math.abs(c.se - r.se) / r.se, r.p > 1e-12 ? Math.abs(c.p - r.p) / r.p : 0);
       }));
       foot += ` ✓ 與 Python statsmodels OLS 對照一致（最大相對誤差 ${maxRel.toExponential(1)}）。`;
     }
@@ -751,10 +759,10 @@
     const C = state.cur, inf = state.inf;
     if (!inf) return;
     const preds = C.problem.testPredictions(inf.cols).sort((a, b) => Math.abs(b.resid) - Math.abs(a.resid));
-    const shown = state.residAll ? preds : preds.slice(0, 10);
+    const shown = state.residAll ? preds.slice(0, 500) : preds.slice(0, 10);
     const sig = inf.sigma;
     $("resid-sub").textContent = `測試集 ${preds.length} 筆，依 |殘差| 排序。|殘差| > 2σ̂ 標為離群值、> 1σ̂ 標為殘差偏高（σ̂ = ${fmtU(sig)}，訓練集殘差標準誤）。`;
-    $("resid-toggle").textContent = state.residAll ? "只顯示前 10 筆" : `顯示全部 ${preds.length} 筆`;
+    $("resid-toggle").textContent = state.residAll ? "只顯示前 10 筆" : preds.length > 500 ? "顯示前 500 筆" : `顯示全部 ${preds.length} 筆`;
     $("resid-toggle").classList.toggle("hidden", preds.length <= 10);
     const head = `<tr><th>Rank</th><th>Sample</th><th class="r">Actual</th><th class="r">Predicted</th><th class="r">Residual</th><th class="r">|Error|</th><th class="r">% Error</th><th>Status</th></tr>`;
     const body = shown.map((p, i) => {
@@ -885,15 +893,18 @@
       const missing = table.rows.length - t.nonNA;
       let mean = "–", corr = "–";
       if (t.numeric) {
-        const xs = kept.map(r => Number(r[j]));
-        const mx = xs.reduce((a, b) => a + b, 0) / xs.length;
-        mean = fmtVal(mx);
-        if (j !== tj) {
-          const my = ty.reduce((a, b) => a + b, 0) / ty.length;
-          let sxy = 0, sxx = 0, syy = 0;
-          xs.forEach((x, i) => { sxy += (x - mx) * (ty[i] - my); sxx += (x - mx) ** 2; syy += (ty[i] - my) ** 2; });
-          const r = sxy / Math.sqrt(sxx * syy);
-          corr = Number.isFinite(r) ? (r >= 0 ? "+" : "−") + Math.abs(r).toFixed(3) : "–";
+        // pairs of finite values only: a dropped column may still hold NA
+        const pairs = kept.map((r, i) => [Number(String(r[j]).trim() || NaN), ty[i]]).filter(([x]) => Number.isFinite(x));
+        if (pairs.length) {
+          const mx = pairs.reduce((a, [x]) => a + x, 0) / pairs.length;
+          mean = fmtVal(mx);
+          if (j !== tj) {
+            const my = pairs.reduce((a, [, v]) => a + v, 0) / pairs.length;
+            let sxy = 0, sxx = 0, syy = 0;
+            for (const [x, v] of pairs) { sxy += (x - mx) * (v - my); sxx += (x - mx) ** 2; syy += (v - my) ** 2; }
+            const r = sxy / Math.sqrt(sxx * syy);
+            corr = Number.isFinite(r) ? (r >= 0 ? "+" : "−") + Math.abs(r).toFixed(3) : "–";
+          }
         }
       }
       const role = h === C.target ? "<b>目標 Target</b>" : prep.dropped.includes(h) ? "排除" : prep.idLike.includes(h) ? "ID / 文字（排除）"

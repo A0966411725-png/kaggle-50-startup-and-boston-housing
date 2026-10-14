@@ -95,7 +95,7 @@ print(table.to_string(index=False))
 best_cols = table.loc[table["RMSE"].idxmin(), "Selected Features"]
 final = LinearRegression().fit(X_train[best_cols], y_train)
 (ROOT / "models").mkdir(exist_ok=True)
-with gzip.open(ROOT / "models" / "startups_lecture_l6.pkl.gz", "wb") as fh:
+with gzip.GzipFile(ROOT / "models" / "startups_lecture_l6.pkl.gz", "wb", mtime=0) as fh:
     pickle.dump({"model": final, "features": best_cols}, fh)
 with gzip.open(ROOT / "models" / "startups_lecture_l6.pkl.gz", "rb") as fh:
     loaded = pickle.load(fh)

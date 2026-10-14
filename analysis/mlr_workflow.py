@@ -74,8 +74,7 @@ def prepare(df, target, drop):
 # OLS helpers (index lists refer to columns of the full encoded matrix)
 # --------------------------------------------------------------------------- #
 def ols_fit(X, y):
-    m = LinearRegression().fit(X, y)
-    return m
+    return LinearRegression().fit(X, y)
 
 
 def rmse(y, p):
@@ -235,6 +234,27 @@ def check_success(criteria, row, infer):
                  passed=bool(OPS[c["op"]](values[c["metric"]], c["value"]))) for c in criteria]
 
 
+# Same order and tie rule as the web page (js/app.js METHODS, sweetSpot, globalBest),
+# so that ties between methods with identical subsets resolve to the same name.
+METHOD_ORDER = ["lasso", "forward", "rfe", "elasticnet", "kbest", "exhaustive", "backward"]
+
+
+def pick_best(table, crit):
+    metric = "cv_rmse" if crit == "cv" else "test_rmse"
+    best = None
+    for m in METHOD_ORDER:
+        rows = table.get(f"{m}_{crit}" if m in ("forward", "exhaustive") else m)
+        if not rows:
+            continue
+        s = rows[0]
+        for r in rows:
+            if r[metric] < s[metric] - 1e-12:
+                s = r
+        if best is None or s[metric] < best[1][metric] - 1e-12:
+            best = (f"{m}_{crit}" if m in ("forward", "exhaustive") else m, s)
+    return best
+
+
 def optuna_lasso(Xs, ytr, folds):
     try:
         import optuna
@@ -308,10 +328,8 @@ def main(config_path):
             table[key].append(row)
 
     # Recommended model: leakage-free choice = min CV RMSE over every method and k
-    best = min(((key, r) for key, rows in table.items() if not key.endswith("_test") for r in rows),
-               key=lambda kr: (kr[1]["cv_rmse"], kr[1]["k"]))
-    best_test = min(((key, r) for key, rows in table.items() if not key.endswith("_cv") for r in rows),
-                    key=lambda kr: (kr[1]["test_rmse"], kr[1]["k"]))
+    best = pick_best(table, "cv")
+    best_test = pick_best(table, "test")
     rec_names = best[1]["features"]
     Xtr_df = pd.DataFrame(Xtr, columns=names)
     infer = inference(Xtr_df, pd.Series(ytr), rec_names, tr_idx)
@@ -332,7 +350,8 @@ def main(config_path):
     rec_cols = [names.index(n) for n in rec_names]
     model = ols_fit(Xtr[:, rec_cols], ytr)
     (ROOT / "models").mkdir(exist_ok=True)
-    with gzip.open(ROOT / "models" / f"{cfg['id']}_ols.pkl.gz", "wb") as fh:
+    # mtime=0 keeps the file byte-identical between runs
+    with gzip.GzipFile(ROOT / "models" / f"{cfg['id']}_ols.pkl.gz", "wb", mtime=0) as fh:
         pickle.dump({"model": model, "features": rec_names, "target": target,
                      "encoded_columns": names, "nominal": nominal}, fh)
 
