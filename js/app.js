@@ -525,43 +525,13 @@
     };
   }
 
-  // Band + dashed line + label at the selected k, drawn behind the lines
-  const kMarker = {
-    id: "kMarker",
-    beforeDatasetsDraw(chart, args, o) {
-      if (o.index == null || o.index < 0) return;
-      const xs = chart.scales.x, { top, bottom, right } = chart.chartArea;
-      const x = xs.getPixelForValue(o.index);
-      const step = xs.ticks.length > 1 ? Math.abs(xs.getPixelForValue(1) - xs.getPixelForValue(0)) : 60;
-      const w = Math.min(56, step * 0.6);
-      const ctx = chart.ctx;
-      ctx.save();
-      ctx.fillStyle = o.fill;
-      ctx.fillRect(x - w / 2, top, w, bottom - top);
-      ctx.strokeStyle = o.line;
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.font = "600 12px system-ui, sans-serif";
-      ctx.fillStyle = o.ink;
-      const text = `目前 k = ${o.index + 1}`;
-      const tw = ctx.measureText(text).width;
-      ctx.textBaseline = "top";
-      ctx.fillText(text, x + 8 + tw > right ? x - 8 - tw : x + 8, top + 4);
-      ctx.restore();
-    },
-  };
-
-  function markK(opts, index) {
+  function axisTicks(opts) {
     if (opts.scales.y.title.text.startsWith("R²")) opts.scales.y.ticks.callback = v => Number(v).toFixed(3);
-    opts.plugins.kMarker = { index, fill: css("--accent-soft"), line: css("--accent"), ink: css("--accent-ink") };
     return opts;
   }
 
   function drawChart(id, config) {
     if (state.charts[id]) state.charts[id].destroy();
-    config.plugins = [kMarker];
     state.charts[id] = new Chart($(id), config);
   }
 
@@ -591,7 +561,7 @@
       drawChart("chart-rmse", {
         type: "line",
         data: { labels, datasets: ms.map(m => lineDS(m.name, tableFor(m.id).map(r => r[metric]), css(m.color), null, m.id === model.method ? model.row.k - 1 : -1)) },
-        options: markK(withTip(baseOptions(yU, pick), tipU), model.row.k - 1),
+        options: axisTicks(withTip(baseOptions(yU, pick), tipU)),
       });
       $("r2-title").textContent = `Test R² vs k（${ms.length} 種方法）`;
       $("r2-sub").textContent = "越高越好；觀察各方法在哪個 k 達到高峰。";
@@ -599,7 +569,7 @@
       drawChart("chart-r2", {
         type: "line",
         data: { labels, datasets: ms.map(m => lineDS(m.name, tableFor(m.id).map(r => r.test_r2), css(m.color), null, m.id === model.method ? model.row.k - 1 : -1)) },
-        options: markK(withTip(baseOptions("R²（越高越好）", pick), tipR), model.row.k - 1),
+        options: axisTicks(withTip(baseOptions("R²（越高越好）", pick), tipR)),
       });
       return;
     }
@@ -619,7 +589,7 @@
           lineDS("Train RMSE", rows.map(r => r.train_rmse), col, [2, 3], hi),
         ],
       },
-      options: markK(withTip(baseOptions(yU, pick), tipU), model.row.k - 1),
+      options: axisTicks(withTip(baseOptions(yU, pick), tipU)),
     });
     $("r2-title").textContent = `R² vs 特徵數 k · ${m.name}`;
     const peak = rows.reduce((a, b) => (b.test_r2 > a.test_r2 ? b : a));
@@ -629,7 +599,7 @@
     drawChart("chart-r2", {
       type: "line",
       data: { labels, datasets: [lineDS("Test R²", rows.map(r => r.test_r2), col, null, hi), lineDS("Train R²", rows.map(r => r.train_r2), col, [2, 3], hi)] },
-      options: markK(withTip(baseOptions("R²（越高越好）", pick), tipR), model.row.k - 1),
+      options: axisTicks(withTip(baseOptions("R²（越高越好）", pick), tipR)),
     });
   }
 
