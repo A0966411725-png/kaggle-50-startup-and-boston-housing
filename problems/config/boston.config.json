@@ -1,0 +1,45 @@
+{
+  "id": "boston",
+  "order": 2,
+  "title": "Boston Housing 房價預測",
+  "short": "Problem 2 · Boston Housing（房價預測）",
+  "source": {
+    "name": "Kaggle Boston Housing（課程 L7 raw CSV，selva86/datasets）",
+    "url": "https://www.kaggle.com/c/boston-housing"
+  },
+  "csv": "data/BostonHousing.csv",
+  "csv_url": "https://raw.githubusercontent.com/selva86/datasets/master/BostonHousing.csv",
+  "target": "medv",
+  "target_label": "MEDV（自有住宅房價中位數，千美元）",
+  "unit": {"prefix": "$", "suffix": "k", "decimals": 2},
+  "labels": {
+    "crim": "CRIM（人均犯罪率）",
+    "zn": "ZN（大坪數住宅用地比例）",
+    "indus": "INDUS（非零售商業用地比例）",
+    "chas": "CHAS（鄰近查爾斯河 = 1）",
+    "nox": "NOX（一氧化氮濃度）",
+    "rm": "RM（平均房間數）",
+    "age": "AGE（1940 年前建成比例）",
+    "dis": "DIS（到就業中心的加權距離）",
+    "rad": "RAD（高速公路可達性指數）",
+    "tax": "TAX（每萬美元房產稅率）",
+    "ptratio": "PTRATIO（師生比）",
+    "b": "B（1000(Bk − 0.63)²，族群比例）",
+    "lstat": "LSTAT（低收入人口比例 %）"
+  },
+  "drop": [],
+  "test_size": 0.2,
+  "random_state": 42,
+  "business": {
+    "objective": "房仲與都市規劃單位想用社區層級的環境、交通、教育與社經指標，預測波士頓各區自有住宅的房價中位數（MEDV），並找出真正影響房價的關鍵因素，作為估價與政策參考。",
+    "success": [
+      "測試集 R² ≥ 0.65（同資料集多元線性迴歸常見水準約 0.67–0.75）",
+      "RMSE 低於 5（千美元），並說明誤差較大的社區",
+      "在 13 個特徵中找出精簡且顯著的子集（p < 0.05、VIF < 10）"
+    ]
+  },
+  "notes": {
+    "data": "506 筆、13 個數值特徵（CHAS 為 0/1 虛擬變數，RAD 為順序指數），無缺失值。MEDV 在 50.0 有上限截斷（16 筆），LSTAT（r = −0.74）與 RM（r = +0.70）和房價最相關。B 欄位以族群比例建構，有倫理爭議（scikit-learn 1.2 已移除此資料集），這裡保留只為了和課程 L7 比較。",
+    "lecture": "課程 L7 以 selva86 的 raw CSV、train_test_split(test_size=0.2) 搭配 Lasso、MIF、RFE、SelectKBest 與 Optuna。這裡用 random_state=42，六種特徵選擇方法都跑 k = 1..13。"
+  }
+}

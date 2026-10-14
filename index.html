@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MLR Feature Selection Explorer</title>
+<meta name="description" content="50 Startups 與 Boston Housing 多元線性迴歸：CRISP-DM、六種特徵選擇方法、統計檢定與即時預測，也可輸入任意 CSV 資料集。">
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234a3aa7'/%3E%3Cpath d='M6 24 L13 15 L18 19 L26 8' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div>
+      <div class="crumbs">AIoT-DA · <b>HW2 Multiple Linear Regression</b> · Kaggle 50 Startups &amp; Boston Housing</div>
+      <div class="brand"><h1>MLR Feature Selection Explorer</h1><span class="pill">CRISP-DM</span></div>
+    </div>
+    <div class="author">陳彥愷 CHEN,YEN-KAI · DIC-2</div>
+  </div>
+
+  <section class="hero">
+    <h2 id="hero-title">載入中…</h2>
+    <p id="hero-desc">比較六種特徵選擇演算法（Lasso、Forward SFS、RFE、ElasticNet、SelectKBest、Exhaustive Search）和 OLS 基準模型，觀察特徵數 k 對偏差與變異的影響。</p>
+    <div class="badges" id="hero-badges"></div>
+  </section>
+
+  <section class="card" id="controls">
+    <div class="step-label">0. 選擇問題 Problem</div>
+    <div class="row">
+      <select id="problem" class="big" aria-label="選擇問題"></select>
+      <a id="source-link" target="_blank" rel="noopener" class="hint"></a>
+    </div>
+
+    <div id="custom" class="custom hidden">
+      <div class="row">
+        <input type="url" id="csv-url" placeholder="貼上 CSV 的 raw 網址，例如 https://raw.githubusercontent.com/…/data.csv" aria-label="CSV 網址">
+        <button class="btn" id="load-url">載入網址</button>
+        <label class="btn ghost" for="csv-file" style="display:inline-block">上傳 CSV</label>
+        <input type="file" id="csv-file" accept=".csv,text/csv" class="hidden">
+      </div>
+      <div class="row hint" id="samples">範例：</div>
+      <div id="custom-config" class="hidden">
+        <div class="row" style="margin-top:12px">
+          <label>目標欄位 Target <select id="target"></select></label>
+          <label>測試集比例 <select id="test-size"><option>0.1</option><option>0.15</option><option selected>0.2</option><option>0.25</option><option>0.3</option></select></label>
+          <label>random_state <input type="number" id="seed" value="42" min="0" style="width:90px"></label>
+          <button class="btn" id="analyze">開始分析</button>
+        </div>
+        <div class="step-label" style="margin-top:12px">排除的欄位（點選切換）</div>
+        <div class="row" id="drop-chips"></div>
+      </div>
+      <div class="status" id="custom-status"></div>
+    </div>
+
+    <div id="method-controls">
+      <div class="step-label">1. 特徵選擇演算法 Feature Selection</div>
+      <div class="row" id="methods"></div>
+      <div class="step-label">2. 選擇準則 Selection Criterion</div>
+      <div class="row">
+        <div class="seg" id="criterion">
+          <button data-c="cv">5-fold CV RMSE（只用訓練集，建議）</button>
+          <button data-c="test">測試集 RMSE（講義 L6 重現）</button>
+        </div>
+      </div>
+      <div class="hint" id="criterion-hint"></div>
+      <div class="step-label">3. 特徵數 k</div>
+      <div class="row" id="ks"></div>
+    </div>
+  </section>
+
+  <div id="results">
+    <section class="kpis" id="kpis"></section>
+
+    <div class="active-bar">
+      <div id="active-feats"></div>
+      <div id="verify"></div>
+    </div>
+
+    <div class="grid2">
+      <section class="card">
+        <h3 id="rmse-title">RMSE vs 特徵數 k</h3>
+        <p class="sub" id="rmse-sub"></p>
+        <div class="legend" id="rmse-legend"></div>
+        <div class="chart-box"><canvas id="chart-rmse" aria-label="RMSE 與特徵數的折線圖"></canvas></div>
+      </section>
+      <section class="card">
+        <h3 id="r2-title">R² vs 特徵數 k</h3>
+        <p class="sub" id="r2-sub"></p>
+        <div class="legend" id="r2-legend"></div>
+        <div class="chart-box"><canvas id="chart-r2" aria-label="R² 與特徵數的折線圖"></canvas></div>
+      </section>
+    </div>
+
+    <section class="card">
+      <h3>迴歸方程式 Fitted OLS Equation</h3>
+      <p class="sub">以訓練集估計；係數單位為「目標單位 / 特徵單位」。</p>
+      <div class="equation" id="equation"></div>
+    </section>
+
+    <div class="grid-main">
+      <section class="card">
+        <h3>係數與統計檢定 Coefficients &amp; Tests</h3>
+        <p class="sub">估計值、標準誤、t 統計量、p 值、95% 信賴區間與 VIF（共線性）。</p>
+        <div class="tbl-wrap"><table id="coef-table"></table></div>
+        <p class="hint" id="coef-foot"></p>
+      </section>
+      <section class="card">
+        <h3>即時預測 Live Predictor <span class="tag info">Deployment</span></h3>
+        <p class="sub">用目前選定的模型即時預測，可拖曳滑桿或直接輸入數值。</p>
+        <div id="predictor"></div>
+        <div class="pred-out">
+          <div class="lbl" id="pred-label">預測值</div>
+          <div class="big num" id="pred-value">–</div>
+          <div class="pi" id="pred-pi"></div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn ghost" id="download-model">下載模型 JSON</button>
+          <a class="btn ghost" id="download-pkl" style="text-decoration:none" target="_blank" rel="noopener">Python 模型 .pkl.gz</a>
+        </div>
+      </section>
+    </div>
+
+    <div class="grid2">
+      <section class="card">
+        <h3>實際值 vs 預測值（測試集）</h3>
+        <p class="sub">越貼近對角線越準；點選資料點可查看樣本。</p>
+        <div class="legend" id="scatter-legend"></div>
+        <div class="chart-box"><canvas id="chart-scatter" aria-label="測試集實際值與預測值散布圖"></canvas></div>
+      </section>
+      <section class="card">
+        <h3>多元迴歸五大假設檢驗</h3>
+        <p class="sub">根據目前模型的訓練集殘差計算（L6 Part 4）。</p>
+        <div class="assume" id="assumptions"></div>
+      </section>
+    </div>
+
+    <section class="card">
+      <h3>測試集殘差與離群值 Residual Diagnostics</h3>
+      <p class="sub" id="resid-sub"></p>
+      <div class="tbl-wrap"><table id="resid-table"></table></div>
+      <div class="row" style="margin-top:10px"><button class="btn ghost" id="resid-toggle">顯示全部</button></div>
+    </section>
+
+    <section class="card">
+      <h3 id="sel-title">特徵選擇結果表 Results Table</h3>
+      <p class="sub" id="sel-sub"></p>
+      <div class="tbl-wrap"><table id="sel-table"></table></div>
+    </section>
+
+    <section class="card" id="crisp">
+      <h3>CRISP-DM 六步驟</h3>
+      <p class="sub">內容依目前的問題與資料自動產生；內建問題附上 Python（scikit-learn / statsmodels）的對照結果。</p>
+      <div class="tabs" id="crisp-tabs"></div>
+      <div class="phase" id="crisp-body"></div>
+    </section>
+  </div>
+
+  <footer>
+    <div class="card">
+      <b>References</b><br>
+      Datasets: <a href="https://www.kaggle.com/code/akash17/50-startups-linearregression" target="_blank" rel="noopener">Kaggle 50 Startups</a> ·
+      <a href="https://github.com/selva86/datasets" target="_blank" rel="noopener">Boston Housing (selva86/datasets)</a><br>
+      Methodology: CRISP-DM · scikit-learn · statsmodels · Optuna（Python 對照），瀏覽器端以純 JavaScript 重算 · Charts: Chart.js<br>
+      Layout reference: <a href="https://huanchen1107.github.io/AIoT-DIC2-MultipleLR/" target="_blank" rel="noopener">huanchen1107 / AIoT-DIC2-MultipleLR</a> ·
+      Problem 2 由 Claude Skill <code>mlr-crisp-dm</code> 產生（見 README）
+    </div>
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+{
+  "id": "startups",
+  "order": 1,
+  "title": "50 Startups 利潤預測",
+  "short": "Problem 1 · 50 Startups（利潤預測）",
+  "source": {
+    "name": "Kaggle 50 Startups（課程 L6 raw CSV）",
+    "url": "https://www.kaggle.com/code/akash17/50-startups-linearregression"
+  },
+  "csv": "data/50_Startups.csv",
+  "csv_url": "https://gist.githubusercontent.com/GaneshSparkz/b5662effbdae8746f7f7d8ed70c42b2d/raw/faf8b1a0d58e251f48a647d3881e7a960c3f0925/50_Startups.csv",
+  "target": "Profit",
+  "target_label": "Profit（利潤）",
+  "unit": {"prefix": "$", "suffix": "", "decimals": 2},
+  "labels": {
+    "R&D Spend": "R&D Spend（研發支出）",
+    "Administration": "Administration（行政支出）",
+    "Marketing Spend": "Marketing Spend（行銷支出）",
+    "State_Florida": "State = Florida",
+    "State_New York": "State = New York"
+  },
+  "drop": [],
+  "test_size": 0.2,
+  "random_state": 0,
+  "business": {
+    "objective": "創投與經營團隊想知道：新創公司的研發、行政、行銷支出與所在州別，哪些因素真正影響年度利潤？目標是建立可解釋的多元線性迴歸模型，用最少的特徵準確預測 Profit。",
+    "success": [
+      "測試集 R² ≥ 0.90，RMSE 越低越好（以美元計）",
+      "模型精簡（Occam's Razor）：在誤差相近時選擇特徵較少的模型",
+      "係數具統計顯著性（p < 0.05），且無嚴重共線性（VIF < 5）"
+    ]
+  },
+  "notes": {
+    "data": "50 筆、4 個原始特徵（3 個連續支出 + 1 個名目變數 State），目標 Profit。R&D Spend 與 Profit 的相關係數高達 0.97。",
+    "lecture": "課程 L6 以 train_test_split(test_size=0.2, random_state=0) 並用「測試集 RMSE」做 Forward Selection，k=1..5 的 RMSE 為 8274.87 / 8198.80 / 8309.06 / 8409.92 / 9137.99。本網站的「講義重現」準則完全重現這組數字。"
+  }
+}
