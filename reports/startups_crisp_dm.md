@@ -6,9 +6,10 @@ Source: [Kaggle 50 Startups（課程 L6 raw CSV）](https://www.kaggle.com/code/
 
 創投與經營團隊想知道：新創公司的研發、行政、行銷支出與所在州別，哪些因素真正影響年度利潤？目標是建立可解釋的多元線性迴歸模型，用最少的特徵準確預測 Profit。
 
-- 測試集 R² ≥ 0.90，RMSE 越低越好（以美元計）
-- 模型精簡（Occam's Razor）：在誤差相近時選擇特徵較少的模型
-- 係數具統計顯著性（p < 0.05），且無嚴重共線性（VIF < 5）
+- 測試集 R² ≥ 0.90
+- 模型精簡（Occam's Razor）：最多 3 個特徵
+- 所有係數顯著（p < 0.05）
+- 無嚴重共線性（最大 VIF < 5）
 
 ## 2. Data Understanding
 
@@ -51,6 +52,11 @@ Source: [Kaggle 50 Startups（課程 L6 raw CSV）](https://www.kaggle.com/code/
 | kbest | 3 | R&D Spend, Marketing Spend, Administration | $9,052.27 | $9,942.73 | $8,803.78 | 0.9394 |
 | kbest | 4 | R&D Spend, Marketing Spend, Administration, State_New York | $9,039.16 | $10,921.97 | $8,997.20 | 0.9367 |
 | kbest | 5 | R&D Spend, Marketing Spend, Administration, State_New York, State_Florida | $9,031.67 | $11,742.11 | $9,137.99 | 0.9347 |
+| backward | 1 | R&D Spend | $9,493.58 | $9,856.13 | $8,274.87 | 0.9465 |
+| backward | 2 | R&D Spend, Marketing Spend | $9,078.62 | $9,756.74 | $8,198.80 | 0.9474 |
+| backward | 3 | R&D Spend, Marketing Spend, Administration | $9,052.27 | $9,942.73 | $8,803.78 | 0.9394 |
+| backward | 4 | R&D Spend, Marketing Spend, Administration, State_Florida | $9,036.51 | $11,167.17 | $9,068.54 | 0.9357 |
+| backward | 5 | R&D Spend, Marketing Spend, Administration, State_Florida, State_New York | $9,031.67 | $11,742.11 | $9,137.99 | 0.9347 |
 | forward_test | 1 | R&D Spend | $9,493.58 | $9,856.13 | $8,274.87 | 0.9465 |
 | forward_test | 2 | R&D Spend, Marketing Spend | $9,078.62 | $9,756.74 | $8,198.80 | 0.9474 |
 | forward_test | 3 | R&D Spend, Marketing Spend, State_New York | $9,069.68 | $10,714.20 | $8,309.06 | 0.9460 |
@@ -78,6 +84,7 @@ Mutual information ranking: R&D Spend (1.398), Marketing Spend (1.013), Administ
 
 ## 5. Evaluation
 
+- Backward elimination (p-value, lecture L6): every coefficient has p < 0.05 at k = 1.
 - Lecture-style choice (min **test** RMSE): `exhaustive_test` k=3 ['R&D Spend', 'Administration', 'State_Florida'] → test RMSE $8,171.65, R² 0.9478.
 - Leakage-free choice (min **5-fold CV** RMSE on training only): `lasso` k=2 ['R&D Spend', 'Marketing Spend'] → test RMSE $8,198.80, R² 0.9474.
 
@@ -87,7 +94,16 @@ Mutual information ranking: R&D Spend (1.398), Marketing Spend (1.013), Administ
 | R&D Spend | 0.7886 | 0.0468 | 16.846 | 6.12e-19 | [0.694, 0.883] | 2.10 |
 | Marketing Spend | 0.0326 | 0.0175 | 1.860 | 0.07085 | [-0.003, 0.068] | 2.10 |
 
-R² (train) 0.9497, adj. R² 0.9469, F(2, 37) = 349.04 (p = 9.65e-25); Durbin–Watson 2.518; Jarque–Bera p 3.39e-05; Breusch–Pagan p 0.215.
+R² (train) 0.9497, adj. R² 0.9469, F(2, 37) = 349.04 (p = 9.65e-25); Ramsey RESET F = 3.14 (p = 0.0558); Durbin–Watson (original row order) 1.410; Jarque–Bera p 3.39e-05; Breusch–Pagan p 0.215.
+
+Business success criteria (checked on the recommended model):
+
+| criterion | actual | result |
+|---|---|---|
+| 測試集 R² ≥ 0.90 | 0.9474 | met |
+| 模型精簡（Occam's Razor）：最多 3 個特徵 | 2 | met |
+| 所有係數顯著（p < 0.05） | 0.07085 | NOT met |
+| 無嚴重共線性（最大 VIF < 5） | 2.099 | met |
 
 ## 6. Deployment
 

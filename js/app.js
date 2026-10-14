@@ -9,7 +9,9 @@
     { id: "elasticnet", name: "ElasticNet", tag: "L1 + L2", color: "--s4" },
     { id: "kbest", name: "SelectKBest", tag: "F 檢定", color: "--s5" },
     { id: "exhaustive", name: "Exhaustive", tag: "最佳子集", color: "--s6", crit: true },
+    { id: "backward", name: "Backward (p 值)", tag: "講義最常用", color: "--s7" },
   ];
+  const N_METHODS = METHODS.length;
   const METHOD_DESC = {
     lasso: "在標準化訓練資料上計算 Lasso 路徑（200 個 α），依特徵「進入模型」的先後排序，取前 k 個再用 OLS 重新估計。",
     forward: "Forward Sequential Selection：每一步加入讓準則（CV 或測試集 RMSE）最低的特徵。",
@@ -17,7 +19,16 @@
     elasticnet: "ElasticNet 路徑（l1_ratio = 0.5），同時有 L1 篩選和 L2 收縮，依進入順序排序。",
     kbest: "SelectKBest(f_regression)：依單變量 F 統計量（等同 |相關係數|）排序，取前 k 個。",
     exhaustive: "暴力搜尋全部 2^p − 1 個子集，對每個 k 找準則最低的組合（p ≤ 16 時可用）。",
+    backward: "Backward Elimination（講義 L6 Part 5「最常用」）：從全部特徵開始，每次刪掉 p 值最大（最不顯著）的特徵；所有係數 p < 0.05 時就是講義的停止點。",
   };
+  const OPS = { ">=": (a, b) => a >= b, ">": (a, b) => a > b, "<=": (a, b) => a <= b, "<": (a, b) => a < b };
+  const DEFAULT_SUCCESS = [
+    { text: "測試集 R² ≥ 0.70", metric: "test_r2", op: ">=", value: 0.7 },
+    { text: "所有係數顯著（p < 0.05）", metric: "max_p", op: "<", value: 0.05 },
+    { text: "共線性可接受（最大 VIF < 10）", metric: "max_vif", op: "<", value: 10 },
+  ];
+  // Set to the GitHub repository URL after the repo is created; shows a link in the header.
+  const REPO_URL = "";
   const SAMPLES = [
     ["50 Startups", "https://raw.githubusercontent.com/Avik-Jain/100-Days-Of-ML-Code/master/datasets/50_Startups.csv"],
     ["Boston Housing", "https://raw.githubusercontent.com/selva86/datasets/master/BostonHousing.csv"],
@@ -32,6 +43,7 @@
   const state = {
     registry: [], cur: null, method: "lasso", criterion: "cv", k: null,
     residAll: false, tab: 0, pred: {}, charts: {}, customTable: null, customDrop: new Set(),
+    loadToken: 0, bundles: {}, tables: {},
   };
 
   // ------------------------------------------------------------ formatting
@@ -85,6 +97,15 @@
   }
 
   // ------------------------------------------------------------ loading
+  async function loadBundle(file) {
+    if (!state.bundles[file]) state.bundles[file] = await (await fetch(file)).json();
+    return state.bundles[file];
+  }
+  async function loadTable(csv) {
+    if (!state.tables[csv]) state.tables[csv] = MLR.parseCSV(await (await fetch(csv)).text());
+    return state.tables[csv];
+  }
+
   async function init() {
     try {
       state.registry = await (await fetch("problems/index.json")).json();
@@ -98,7 +119,7 @@
 
     $("methods").innerHTML = METHODS.map(m =>
       `<button class="chip" data-m="${m.id}"><span class="dot" style="background:var(${m.color})"></span>${m.name}<small>${m.tag}</small></button>`
-    ).join("") + `<button class="chip" data-m="compare">比較全部 6 種方法</button>`;
+    ).join("") + `<button class="chip" data-m="compare">比較全部 ${N_METHODS} 種方法</button>`;
     $("methods").addEventListener("click", e => {
       const b = e.target.closest("[data-m]");
       if (!b || b.disabled) return;
@@ -136,8 +157,10 @@
     setupCustom();
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => state.cur && render());
 
+    if (REPO_URL) { $("repo-link").href = REPO_URL; $("repo-link").classList.remove("hidden"); }
     const params = new URLSearchParams(location.search);
-    const want = params.get("problem") || (params.get("csv") ? "custom" : state.registry[0]?.id || "custom");
+    let want = params.get("problem") || (params.get("csv") ? "custom" : state.registry[0]?.id || "custom");
+    if (want !== "custom" && !state.registry.find(r => r.id === want)) want = state.registry[0]?.id || "custom";
     sel.value = want;
     await selectProblem(want);
     if (want === "custom" && params.get("csv")) {
@@ -147,6 +170,7 @@
   }
 
   async function selectProblem(id) {
+    const token = ++state.loadToken;
     const params = new URLSearchParams(location.search);
     params.set("problem", id);
     if (id !== "custom") { params.delete("csv"); params.delete("target"); }
@@ -156,7 +180,7 @@
       $("results").classList.toggle("hidden", !(state.cur && state.cur.custom));
       $("method-controls").classList.toggle("hidden", !(state.cur && state.cur.custom));
       if (state.cur && state.cur.custom) render();
-      else setHero("自訂資料集 Custom Dataset", "貼上任何 CSV 的 raw 網址（例如 GitHub raw）或上傳檔案，選擇目標欄位後，網站會在瀏覽器內跑完整的 CRISP-DM 與六種特徵選擇。", []);
+      else setHero("自訂資料集 Custom Dataset", "貼上任何 CSV 的 raw 網址（例如 GitHub raw）或上傳檔案，選擇目標欄位後，網站會在瀏覽器內跑完整的 CRISP-DM 與七種特徵選擇。", []);
       return;
     }
     $("results").classList.remove("hidden");
@@ -164,9 +188,9 @@
     const entry = state.registry.find(r => r.id === id);
     document.body.classList.add("loading");
     try {
-      const bundle = await (await fetch(entry.file)).json();
-      const text = await (await fetch(bundle.csv)).text();
-      const table = MLR.parseCSV(text);
+      const bundle = await loadBundle(entry.file);
+      const table = await loadTable(bundle.csv);
+      if (token !== state.loadToken) return; // the user picked another problem meanwhile
       const prep = MLR.prepare(table, { target: bundle.target, drop: bundle.drop });
       const jsSplit = MLR.sklearnSplit(prep.n, bundle.test_size, bundle.random_state);
       const split = { train: bundle.split.train_idx, test: bundle.split.test_idx };
@@ -239,7 +263,7 @@
     try {
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      customLoaded(await res.text(), url.split("/").pop(), url, target);
+      await customLoaded(await res.text(), url.split("/").pop(), url, target);
     } catch (err) {
       status(`無法下載：${esc(err.message)}。請確認是 raw CSV 網址，且伺服器允許跨網域讀取（GitHub raw、gist 都可以）；也可以改用「上傳 CSV」。`, "err");
     } finally {
@@ -247,7 +271,27 @@
     }
   }
 
-  function customLoaded(text, name, url, wantTarget) {
+  // A custom CSV that is the same data as a built-in problem gets that problem's
+  // split settings, so its numbers match the built-in page exactly.
+  function fingerprint(table) {
+    const norm = v => { const t = String(v).trim(); const n = Number(t); return t !== "" && Number.isFinite(n) ? String(n) : t; };
+    return table.header.map(norm).join("\u0001") + "\u0002" + table.rows.map(r => r.map(norm).join("\u0001")).join("\u0002");
+  }
+  async function matchBuiltin(table) {
+    let fp = null;
+    for (const r of state.registry) {
+      try {
+        const b = await loadBundle(r.file);
+        const t = await loadTable(b.csv);
+        if (t.rows.length !== table.rows.length || t.header.length !== table.header.length) continue;
+        fp = fp || fingerprint(table);
+        if (fingerprint(t) === fp) return Object.assign({ short: r.short }, b);
+      } catch (e) { /* a missing built-in file only disables the match */ }
+    }
+    return null;
+  }
+
+  async function customLoaded(text, name, url, wantTarget) {
     let table;
     try { table = MLR.parseCSV(text); } catch (err) { status(esc(err.message), "err"); return; }
     const types = MLR.columnTypes(table);
@@ -261,8 +305,20 @@
     renderDropChips();
     $("target").onchange = renderDropChips;
     $("custom-config").classList.remove("hidden");
-    status(`已讀取 <b>${esc(name)}</b>：${table.rows.length} 列 × ${table.header.length} 欄` +
-      (table.skipped ? `（${table.skipped} 列欄位數不符已略過）` : "") + "。請確認目標欄位後按「開始分析」。", "ok");
+    let msg = `已讀取 <b>${esc(name)}</b>：${table.rows.length} 列 × ${table.header.length} 欄` +
+      (table.skipped ? `（${table.skipped} 列欄位數不符已略過）` : "") + "。請確認目標欄位後按「開始分析」。";
+    const match = await matchBuiltin(table);
+    $("seed").value = 42;
+    $("test-size").value = "0.2";
+    if (match) {
+      if (!wantTarget && numeric.includes(match.target)) $("target").value = match.target;
+      $("seed").value = match.random_state;
+      $("test-size").value = String(match.test_size);
+      state.customDrop = new Set(match.drop);
+      renderDropChips();
+      msg += `<br>這份資料和「${esc(match.short)}」相同，已自動套用相同的 random_state = ${match.random_state}、test_size = ${match.test_size}，分析結果會和內建問題一致（可自行修改）。`;
+    }
+    status(msg, "ok");
     if (wantTarget) analyzeCustom();
   }
 
@@ -323,10 +379,14 @@
     // method chips
     document.querySelectorAll("#methods [data-m]").forEach(b => {
       b.classList.toggle("on", b.dataset.m === state.method);
+      b.setAttribute("aria-pressed", String(b.dataset.m === state.method));
       b.disabled = b.dataset.m === "exhaustive" && !P.exhaustiveAllowed;
       b.title = b.disabled ? `p = ${P.p} > ${MLR.MAX_EXHAUSTIVE_P}，暴力搜尋太慢` : "";
     });
-    document.querySelectorAll("#criterion [data-c]").forEach(b => b.classList.toggle("on", b.dataset.c === state.criterion));
+    document.querySelectorAll("#criterion [data-c]").forEach(b => {
+      b.classList.toggle("on", b.dataset.c === state.criterion);
+      b.setAttribute("aria-pressed", String(b.dataset.c === state.criterion));
+    });
     $("criterion-hint").innerHTML = state.criterion === "cv"
       ? "只用訓練集的 5-fold CV RMSE 來決定 Forward / Exhaustive 的特徵與最佳 k，測試集只拿來做最後評估。"
       : "⚠ 這是講義 L6 的做法：直接用測試集 RMSE 挑特徵。測試分數會偏樂觀（資料洩漏），這裡只用來重現講義結果。";
@@ -336,12 +396,16 @@
     const ss = rows ? sweetSpot(rows) : null;
     if (state.method === "compare") state.k = model.row.k;
 
+    // nested methods add one feature per k, so the chip can name it; exhaustive subsets are not nested
+    const nested = rows && state.method !== "exhaustive";
+    const stop = state.method === "backward" ? P.backwardStop() : null;
     $("ks").innerHTML = Array.from({ length: P.p }, (_, i) => {
       const k = i + 1;
       const star = ss && ss.k === k, full = k === P.p;
-      const extra = star ? "★ 最佳" : full ? "⚠ 全部特徵" : rows ? esc(shortLabel(rows[i].features[rows[i].features.length - 1])) : "";
+      const extra = star ? "★ 最佳" : full ? "⚠ 全部特徵" : k === stop ? "p 值停止點"
+        : nested ? "+ " + esc(shortLabel(rows[i].features[rows[i].features.length - 1])) : "";
       const on = state.method === "compare" ? false : state.k === k;
-      return `<button class="chip ${on ? "on" : ""} ${star ? "star" : ""} ${full ? "full" : ""}" data-k="${k}">k = ${k}${extra ? `<small>${extra}</small>` : ""}</button>`;
+      return `<button class="chip ${on ? "on" : ""} ${star ? "star" : ""} ${full ? "full" : ""}" data-k="${k}" aria-pressed="${on}">k = ${k}${extra ? `<small>${extra}</small>` : ""}</button>`;
     }).join("");
 
     renderHero();
@@ -373,10 +437,10 @@
     const crit = state.criterion === "cv" ? "CV" : "Test";
     const fullRow = tableFor("lasso")[P.p - 1];
     const desc = C.bundle ? C.bundle.business.objective
-      : `以「${C.target}」為目標，在瀏覽器內比較六種特徵選擇方法與 OLS，找出最精簡、泛化最好的特徵組合。`;
+      : `以「${C.target}」為目標，在瀏覽器內比較七種特徵選擇方法與 OLS，找出最精簡、泛化最好的特徵組合。`;
     setHero(C.title, desc, [
       `📊 ${C.prep.n} 筆 · ${P.p} 個特徵（${P.ntr} 訓練 / ${P.nte} 測試）`,
-      `🧪 6 種特徵選擇方法`,
+      `🧪 ${N_METHODS} 種特徵選擇方法`,
       `★ 全域最佳（${crit} 準則）：${esc(methodById(gb.method).name)} k=${gb.row.k}，Test RMSE ${fmtU(gb.row.test_rmse)}`,
       `⚠ 全部 ${P.p} 個特徵：Test RMSE ${fmtU(fullRow.test_rmse)}`,
     ]);
@@ -486,7 +550,7 @@
       const ms = METHODS.filter(m => tableFor(m.id));
       const metric = metricOf();
       const critName = state.criterion === "cv" ? "5-fold CV RMSE" : "Test RMSE";
-      $("rmse-title").textContent = `${critName} vs k（6 種方法）`;
+      $("rmse-title").textContent = `${critName} vs k（${ms.length} 種方法）`;
       $("rmse-sub").textContent = "每條線是一種特徵選擇方法；點任一點可切換到該方法與 k。";
       $("rmse-legend").innerHTML = legendHTML(ms.map(m => [m.name, css(m.color)]));
       drawChart("chart-rmse", {
@@ -494,7 +558,7 @@
         data: { labels, datasets: ms.map(m => lineDS(m.name, tableFor(m.id).map(r => r[metric]), css(m.color), null, m.id === model.method ? model.row.k - 1 : -1)) },
         options: withTip(baseOptions(yU, pick), tipU),
       });
-      $("r2-title").textContent = "Test R² vs k（6 種方法）";
+      $("r2-title").textContent = `Test R² vs k（${ms.length} 種方法）`;
       $("r2-sub").textContent = "越高越好；觀察各方法在哪個 k 達到高峰。";
       $("r2-legend").innerHTML = legendHTML(ms.map(m => [m.name, css(m.color)]));
       drawChart("chart-r2", {
@@ -524,7 +588,8 @@
     });
     $("r2-title").textContent = `R² vs 特徵數 k · ${m.name}`;
     const peak = rows.reduce((a, b) => (b.test_r2 > a.test_r2 ? b : a));
-    $("r2-sub").textContent = `Test R² 在 k=${peak.k} 達高峰（${fmtN(peak.test_r2, 4)}）；訓練集 R² 只會隨 k 增加，不能用來選 k。目前最佳 k（依準則）= ${ss.k}。`;
+    const trainR2 = state.method === "exhaustive" ? "訓練集 R² 通常隨 k 增加" : "訓練集 R² 只會隨 k 增加（每多一個特徵都不會變差）";
+    $("r2-sub").textContent = `Test R² 在 k=${peak.k} 達高峰（${fmtN(peak.test_r2, 4)}）；${trainR2}，不能用來選 k。目前最佳 k（依準則）= ${ss.k}。`;
     $("r2-legend").innerHTML = legendHTML([["Test R²", col], ["Train R²", col, "dot"]]);
     drawChart("chart-r2", {
       type: "line",
@@ -632,6 +697,7 @@
     $("predictor").oninput = e => {
       const el = e.target;
       if (!el.dataset.col) return;
+      if (el.tagName !== "SELECT" && (el.value === "" || !Number.isFinite(+el.value))) return;
       state.pred[el.dataset.col] = el.tagName === "SELECT" ? el.value : +el.value;
       if (el.dataset.idx) {
         $("predictor").querySelectorAll(`[data-idx="${el.dataset.idx}"]`).forEach(x => { if (x !== el) x.value = el.value; });
@@ -663,10 +729,10 @@
 
   function renderAssumptions(inf) {
     const items = [
-      ["線性 Linearity", "整體 F 檢定：特徵與目標之間有顯著線性關係", `F p ${inf.f_pvalue < 0.0001 ? "< 0.0001" : "= " + inf.f_pvalue.toFixed(4)}`, inf.f_pvalue < 0.05 ? "good" : "crit"],
+      ["線性 Linearity", "Ramsey RESET 檢定：加入 ŷ²、ŷ³ 後沒有顯著改善（p > 0.05）才視為線性", `RESET F ${fmtN(inf.reset_f, 2)} · p ${fmtP(inf.reset_p)}`, inf.reset_p > 0.05 ? "good" : "warn"],
       ["殘差常態 Normality", "Jarque–Bera 檢定（p > 0.05 視為常態）", `JB ${fmtN(inf.jarque_bera, 2)} · p ${fmtP(inf.jarque_bera_p)}`, inf.jarque_bera_p > 0.05 ? "good" : "warn"],
       ["同質變異 Homoscedasticity", "Breusch–Pagan（Koenker）檢定（p > 0.05 視為同質）", `LM ${fmtN(inf.breusch_pagan, 2)} · p ${fmtP(inf.breusch_pagan_p)}`, inf.breusch_pagan_p > 0.05 ? "good" : "warn"],
-      ["誤差獨立 Independence", "Durbin–Watson 介於 1.5–2.5 視為無自我相關", `DW ${fmtN(inf.durbin_watson, 3)}`, inf.durbin_watson > 1.5 && inf.durbin_watson < 2.5 ? "good" : "warn"],
+      ["誤差獨立 Independence", "Durbin–Watson 依資料原本的列順序計算（隨機切分後的順序沒有意義），1.5–2.5 視為無自我相關", `DW ${fmtN(inf.durbin_watson, 3)}`, inf.durbin_watson > 1.5 && inf.durbin_watson < 2.5 ? "good" : "warn"],
       ["無共線性 No Multicollinearity", "最大 VIF < 5 良好、5–10 中度、> 10 嚴重", `max VIF ${fmtN(inf.max_vif, 2)}`, inf.max_vif < 5 ? "good" : inf.max_vif < 10 ? "warn" : "crit"],
     ];
     const icon = { good: "✓", warn: "!", crit: "✕" };
@@ -701,7 +767,7 @@
     const C = state.cur;
     const featCell = fs => fs.map(f => `<span class="feat">${esc(shortLabel(f))}</span>`).join("");
     if (state.method === "compare") {
-      $("sel-title").textContent = "六種方法比較 Comparison";
+      $("sel-title").textContent = `${N_METHODS} 種方法比較 Comparison`;
       $("sel-sub").textContent = `每種方法在目前準則（${state.criterion === "cv" ? "5-fold CV" : "測試集"} RMSE）下的最佳 k。點選列可切換到該方法。`;
       const head = `<tr><th>Method</th><th class="r">最佳 k</th><th>Selected Features</th><th class="r">Train RMSE</th><th class="r">CV RMSE</th><th class="r">Test RMSE</th><th class="r">Test R²</th></tr>`;
       const body = METHODS.map(m => {
@@ -720,12 +786,16 @@
     const m = methodById(state.method);
     $("sel-title").textContent = `特徵選擇結果表 Results Table · ${m.name}`;
     let sub = METHOD_DESC[m.id];
+    const stop = state.method === "backward" ? C.problem.backwardStop() : null;
+    if (state.method === "backward") {
+      sub += stop ? ` 本資料在 k = ${stop} 時所有係數 p < 0.05。` : " 本資料即使只剩 1 個特徵，係數也不顯著。";
+    }
     if (C.id === "startups" && state.method === "forward" && state.criterion === "test") {
       sub += " 這張表和講義 L6 的 Results Table 完全相同（RMSE 8274.87 / 8198.80 / 8309.06 / 8409.92 / 9137.99）。";
     }
     $("sel-sub").textContent = sub + " 點選列可切換 k。";
     const head = `<tr><th class="r">k</th><th>Selected Features</th><th class="r">Train RMSE</th><th class="r">5-fold CV RMSE</th><th class="r">Test RMSE</th><th class="r">Test R²</th></tr>`;
-    const body = rows.map(r => `<tr class="${r.k === state.k ? "hl" : ""}" data-k="${r.k}" style="cursor:pointer"><td class="r">${r.k}${r.k === ss.k ? " ★" : ""}</td>` +
+    const body = rows.map(r => `<tr class="${r.k === state.k ? "hl" : ""}" data-k="${r.k}" style="cursor:pointer"><td class="r">${r.k}${r.k === ss.k ? " ★" : ""}${r.k === stop ? ` <span class="tag info">p 值停止點</span>` : ""}</td>` +
       `<td>${featCell(r.features)}</td><td class="r num">${fmtU(r.train_rmse)}</td><td class="r num">${fmtU(r.cv_rmse)}</td>` +
       `<td class="r num">${fmtU(r.test_rmse)}</td><td class="r num">${fmtN(r.test_r2, 6)}</td></tr>`).join("");
     $("sel-table").innerHTML = `<thead>${head}</thead><tbody>${body}</tbody>`;
@@ -735,16 +805,67 @@
   const PHASES = ["1 商業理解", "2 資料理解", "3 資料準備", "4 建立模型", "5 模型評估", "6 部署"];
 
   function renderCrisp() {
-    $("crisp-tabs").innerHTML = PHASES.map((p, i) => `<button class="${i === state.tab ? "on" : ""}" data-t="${i}">${p}</button>`).join("");
+    $("crisp-tabs").innerHTML = PHASES.map((p, i) =>
+      `<button class="${i === state.tab ? "on" : ""}" data-t="${i}" role="tab" aria-selected="${i === state.tab}">${p}</button>`).join("");
     $("crisp-body").innerHTML = [phaseBusiness, phaseData, phasePrep, phaseModel, phaseEval, phaseDeploy][state.tab]();
+    if (state.tab === 1) drawDataCharts();
+  }
+
+  // Business success criteria, checked on the leakage-free (CV) recommended model
+  function successChecks() {
+    const C = state.cur, best = globalBest("cv");
+    const inf = C.problem.inference(best.row.cols);
+    const values = {
+      test_r2: best.row.test_r2, test_rmse: best.row.test_rmse, test_mae: best.row.test_mae,
+      cv_rmse: best.row.cv_rmse, k: best.row.k, max_vif: inf.max_vif,
+      max_p: Math.max(...inf.coefficients.slice(1).map(c => c.p)),
+    };
+    const crit = C.bundle ? C.bundle.business.success : DEFAULT_SUCCESS;
+    return { best, inf, checks: crit.map(c => Object.assign({}, c, { actual: values[c.metric], passed: OPS[c.op](values[c.metric], c.value) })) };
+  }
+
+  function fmtMetric(metric, v) {
+    if (["test_rmse", "cv_rmse", "test_mae"].includes(metric)) return fmtU(v);
+    if (metric === "k") return String(v);
+    if (metric === "max_p") return fmtP(v);
+    return fmtN(v, metric === "max_vif" ? 2 : 4);
+  }
+
+  function successHTML() {
+    const C = state.cur, P = C.problem;
+    const { best, inf, checks } = successChecks();
+    const rows = checks.map(c => `<tr><td>${esc(c.text)}</td><td class="r num">${fmtMetric(c.metric, c.actual)}</td>` +
+      `<td>${c.passed ? `<span class="tag good">✓ 達成</span>` : `<span class="tag crit">✕ 未達成</span>`}</td></tr>`).join("");
+    const notes = [];
+    if (checks.some(c => c.metric === "max_p" && !c.passed)) {
+      const ns = inf.coefficients.slice(1).filter(c => c.p >= 0.05).map(c => `${esc(shortLabel(c.name))}（p = ${c.p.toFixed(3)}）`);
+      const stop = P.backwardStop();
+      let t = `不顯著的係數：${ns.join("、")}。`;
+      if (stop) {
+        const r = tableFor("backward")[stop - 1];
+        t += ` 若要求所有係數都顯著，Backward（p 值）會停在 k = ${stop}（${r.features.map(f => esc(shortLabel(f))).join("、")}），` +
+          `Test RMSE ${fmtU(r.test_rmse)}，推薦模型是 ${fmtU(best.row.test_rmse)}：這是「精簡、可解釋」和「預測誤差」之間的取捨。`;
+      }
+      notes.push(t);
+    }
+    if (checks.some(c => ["test_r2", "test_rmse", "test_mae", "cv_rmse"].includes(c.metric) && !c.passed)) {
+      notes.push(inf.reset_p < 0.05
+        ? `預測誤差未達標，而且 RESET 檢定（p ${fmtP(inf.reset_p)}）顯示存在非線性關係：線性模型已接近極限，可考慮加入轉換或多項式項（例如 log、平方項）。`
+        : "預測誤差未達標：可能需要更多特徵或更多資料。");
+    }
+    return `<p>以只用訓練集 CV 選出的推薦模型（${esc(methodById(best.method).name)} k = ${best.row.k}）逐項檢核${C.bundle ? "" : "（自訂資料使用預設標準）"}：</p>` +
+      `<div class="tbl-wrap"><table><thead><tr><th>成功標準</th><th class="r">實際值</th><th>結果</th></tr></thead><tbody>${rows}</tbody></table></div>` +
+      notes.map(n => `<div class="callout">${n}</div>`).join("");
   }
 
   function phaseBusiness() {
     const C = state.cur, B = C.bundle;
     const gbCV = globalBest("cv");
     const obj = B ? B.business.objective : `預測連續數值「${C.target}」，並找出真正影響它的特徵。`;
-    const succ = B ? B.business.success : ["測試集 R² 越高越好、RMSE 越低越好", "誤差相近時選擇特徵較少的模型（Occam's Razor）", "係數顯著（p < 0.05）且共線性低（VIF < 5）"];
+    const succ = (B ? B.business.success : DEFAULT_SUCCESS).map(c => c.text);
+    const met = successChecks().checks;
     return `<h4>Business Understanding</h4><p>${esc(obj)}</p><h4>成功標準 Success Criteria</h4><ul>${succ.map(s => `<li>${esc(s)}</li>`).join("")}</ul>` +
+      `<p class="hint">達成 ${met.filter(c => c.passed).length} / ${met.length} 項，逐項檢核見「5 模型評估」。</p>` +
       `<div class="callout">本頁的結論：只用訓練集 CV 挑選時，最佳模型是 <b>${esc(methodById(gbCV.method).name)}</b> k = ${gbCV.row.k}（${gbCV.row.features.map(f => esc(shortLabel(f))).join("、")}），` +
       `測試集 RMSE ${fmtU(gbCV.row.test_rmse)}、R² ${fmtN(gbCV.row.test_r2, 4)}。</div>`;
   }
@@ -777,7 +898,53 @@
     const note = C.bundle ? `<p>${esc(C.bundle.notes.data)}</p>` : "";
     return `<h4>Data Understanding</h4><p>資料來源：${C.source.url ? `<a href="${esc(C.source.url)}" target="_blank" rel="noopener">${esc(C.source.name)}</a>` : esc(C.source.name)}` +
       `${C.csvUrl ? `（<a href="${esc(C.csvUrl)}" target="_blank" rel="noopener">raw CSV</a>）` : ""}，共 ${table.rows.length} 列 × ${table.header.length} 欄。</p>${note}` +
-      `<div class="tbl-wrap"><table><thead><tr><th>欄位</th><th>角色 / 型態</th><th class="r">缺失</th><th class="r">唯一值</th><th class="r">平均</th><th class="r">與目標相關 r</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      `<div class="tbl-wrap"><table><thead><tr><th>欄位</th><th>角色 / 型態</th><th class="r">缺失</th><th class="r">唯一值</th><th class="r">平均</th><th class="r">與目標相關 r</th></tr></thead><tbody>${rows}</tbody></table></div>` +
+      `<h4>各特徵與目標的相關係數（編碼後特徵，全部資料）</h4><div class="legend" id="corr-legend"></div>` +
+      `<div class="chart-box" style="height:${Math.max(180, 26 * prep.names.length + 60)}px"><canvas id="chart-corr" aria-label="各特徵與目標的相關係數長條圖"></canvas></div>` +
+      `<h4 id="eda-title">最相關的特徵 vs 目標</h4><div class="chart-box"><canvas id="chart-eda" aria-label="最相關特徵與目標的散布圖"></canvas></div>`;
+  }
+
+  function pearson(a, b) {
+    const n = a.length;
+    let ma = 0, mb = 0;
+    for (let i = 0; i < n; i++) { ma += a[i]; mb += b[i]; }
+    ma /= n; mb /= n;
+    let sab = 0, saa = 0, sbb = 0;
+    for (let i = 0; i < n; i++) { const da = a[i] - ma, db = b[i] - mb; sab += da * db; saa += da * da; sbb += db * db; }
+    return sab / Math.sqrt(saa * sbb);
+  }
+
+  function drawDataCharts() {
+    const C = state.cur, prep = C.prep;
+    const corr = prep.names.map((nm, j) => ({ nm, j, r: pearson(prep.X[j], prep.y) }))
+      .filter(d => Number.isFinite(d.r)).sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
+    if (!corr.length) return;
+    const pos = css("--s1"), neg = css("--s8");
+    $("corr-legend").innerHTML = `<span><i style="border-color:${pos};border-top-width:8px"></i>正相關</span><span><i style="border-color:${neg};border-top-width:8px"></i>負相關</span>`;
+    const opts = baseOptions("");
+    opts.indexAxis = "y";
+    opts.interaction = { mode: "nearest", axis: "y", intersect: false };
+    opts.scales.x = { min: -1, max: 1, title: { display: true, text: `與 ${C.target} 的相關係數 r`, color: css("--muted") }, grid: { color: css("--grid") }, ticks: { color: css("--muted") }, border: { display: false } };
+    opts.scales.y = { grid: { display: false }, ticks: { color: css("--ink-2"), autoSkip: false }, border: { color: css("--axis") } };
+    opts.plugins.tooltip.callbacks = { label: ctx => `r = ${ctx.parsed.x >= 0 ? "+" : "−"}${Math.abs(ctx.parsed.x).toFixed(3)}` };
+    opts.onClick = null;
+    drawChart("chart-corr", {
+      type: "bar",
+      data: { labels: corr.map(d => shortLabel(d.nm)), datasets: [{ data: corr.map(d => d.r), backgroundColor: corr.map(d => (d.r >= 0 ? pos : neg)), borderRadius: 4, maxBarThickness: 16 }] },
+      options: opts,
+    });
+    const top = corr[0];
+    $("eda-title").textContent = `最相關的特徵：${shortLabel(top.nm)} vs ${C.target}（r = ${top.r.toFixed(3)}）`;
+    const sc = baseOptions(C.target);
+    sc.interaction = { mode: "nearest", intersect: true };
+    sc.scales.x = { type: "linear", title: { display: true, text: shortLabel(top.nm), color: css("--muted") }, grid: { color: css("--grid") }, ticks: { color: css("--muted") }, border: { color: css("--axis") } };
+    sc.plugins.tooltip.callbacks = { title: () => "", label: ctx => [`${shortLabel(top.nm)} = ${fmtVal(ctx.parsed.x)}`, `${C.target} = ${fmtVal(ctx.parsed.y)}`] };
+    sc.onClick = null;
+    drawChart("chart-eda", {
+      type: "scatter",
+      data: { datasets: [{ data: Array.from(prep.X[top.j], (x, i) => ({ x, y: prep.y[i] })), backgroundColor: pos, borderColor: css("--surface"), borderWidth: 1, pointRadius: prep.n > 2000 ? 2 : 4, pointHoverRadius: 6 }] },
+      options: sc,
+    });
   }
 
   function phasePrep() {
@@ -817,20 +984,31 @@
     const first = rows[0], full = rows[P.p - 1];
     const bestTest = rows.reduce((a, b) => (b.test_rmse < a.test_rmse ? b : a));
     const inf = state.inf;
+    const mName = methodById(state.method === "compare" ? cv.method : state.method);
+    const trainTxt = mName.id === "exhaustive" ? "訓練誤差大致隨 k 下降" : "訓練誤差隨 k 一路下降（多加特徵不會讓訓練誤差變大）";
+    const gap = first.test_rmse / bestTest.test_rmse - 1;
+    const underfit = bestTest.k === 1 ? "已經是最低的測試誤差"
+      : gap > 0.05 ? `比最佳 k 高 ${(gap * 100).toFixed(1)}%，特徵太少（underfit）`
+      : `只比最佳 k 高 ${(gap * 100).toFixed(1)}%，單一特徵就解釋了大部分變異`;
+    let curve;
+    if (bestTest.k === P.p) curve = `測試誤差在用上全部 ${P.p} 個特徵時最低，這個方法下沒有明顯的過擬合；挑選特徵的好處主要是模型更精簡、更好解釋。`;
+    else if (bestTest.k === 1) curve = "只用 1 個特徵時測試誤差就最低，之後加入的特徵都沒有改善測試誤差。";
+    else curve = `測試誤差在 k = ${bestTest.k} 最低（${fmtU(bestTest.test_rmse)}），用上全部特徵時回升到 ${fmtU(full.test_rmse)}，多出來的特徵開始擬合雜訊（過擬合）。`;
     let py = "";
     if (C.bundle) {
       const bi = C.bundle.inference;
       py = `<h4>Python statsmodels 對照（推薦模型：${bi.features.map(f => esc(shortLabel(f))).join("、")}）</h4>` +
-        `<p>R² ${fmtN(bi.r2_train, 4)}、Adj. R² ${fmtN(bi.adj_r2_train, 4)}、F = ${fmtN(bi.f_stat, 2)}（p ${bi.f_pvalue < 1e-4 ? "< 0.0001" : bi.f_pvalue.toFixed(4)}）、Durbin–Watson ${fmtN(bi.durbin_watson, 3)}、Jarque–Bera p ${fmtP(bi.jarque_bera_p)}、Breusch–Pagan p ${fmtP(bi.breusch_pagan_p)}。` +
+        `<p>R² ${fmtN(bi.r2_train, 4)}、Adj. R² ${fmtN(bi.adj_r2_train, 4)}、F = ${fmtN(bi.f_stat, 2)}（p ${bi.f_pvalue < 1e-4 ? "< 0.0001" : bi.f_pvalue.toFixed(4)}）、Ramsey RESET p ${fmtP(bi.reset_p)}、Durbin–Watson ${fmtN(bi.durbin_watson, 3)}、Jarque–Bera p ${fmtP(bi.jarque_bera_p)}、Breusch–Pagan p ${fmtP(bi.breusch_pagan_p)}。` +
         ` 完整報告：<a href="reports/${esc(C.id)}_crisp_dm.md" target="_blank" rel="noopener">reports/${esc(C.id)}_crisp_dm.md</a></p>`;
     }
     return `<h4>Evaluation</h4><ul>` +
       `<li><b>MSE</b> = 平均平方誤差；<b>RMSE</b> = √MSE，和目標同單位；<b>MAE</b> = 平均絕對誤差，對離群值較不敏感；<b>R²</b> = 模型解釋的變異比例；<b>Adjusted R²</b> 會懲罰多餘特徵。</li>` +
-      `<li><b>Underfit / Overfit</b>（${esc(methodById(state.method === "compare" ? cv.method : state.method).name)}）：k = 1 時 train RMSE ${fmtU(first.train_rmse)}、test ${fmtU(first.test_rmse)}；` +
-      `全部 ${P.p} 個特徵時 train ${fmtU(full.train_rmse)}、test ${fmtU(full.test_rmse)}。訓練誤差隨 k 一路下降，測試誤差在 k = ${bestTest.k} 最低，之後再加特徵就是在擬合雜訊。</li>` +
+      `<li><b>Underfit / Overfit</b>（${esc(mName.name)}）：k = 1 時 train RMSE ${fmtU(first.train_rmse)}、test ${fmtU(first.test_rmse)}，${underfit}；` +
+      `全部 ${P.p} 個特徵時 train ${fmtU(full.train_rmse)}、test ${fmtU(full.test_rmse)}。${trainTxt}；${curve}</li>` +
       `<li><b>講義做法</b>（用測試集挑）：${esc(methodById(lect.method).name)} k = ${lect.row.k}，Test RMSE ${fmtU(lect.row.test_rmse)}，但這個分數偏樂觀。</li>` +
       `<li><b>無資料洩漏做法</b>（用 CV 挑）：${esc(methodById(cv.method).name)} k = ${cv.row.k}，Test RMSE ${fmtU(cv.row.test_rmse)}、R² ${fmtN(cv.row.test_r2, 4)}，這才是誠實的泛化估計。</li>` +
-      `<li>目前模型的假設檢驗：DW ${fmtN(inf.durbin_watson, 3)}、JB p ${fmtP(inf.jarque_bera_p)}、BP p ${fmtP(inf.breusch_pagan_p)}、max VIF ${fmtN(inf.max_vif, 2)}（詳見上方五大假設卡片）。</li></ul>` + py;
+      `<li>目前模型的假設檢驗：RESET p ${fmtP(inf.reset_p)}、DW ${fmtN(inf.durbin_watson, 3)}、JB p ${fmtP(inf.jarque_bera_p)}、BP p ${fmtP(inf.breusch_pagan_p)}、max VIF ${fmtN(inf.max_vif, 2)}（詳見上方五大假設卡片）。</li></ul>` +
+      `<h4>對照商業成功標準</h4>` + successHTML() + py;
   }
 
   function phaseDeploy() {

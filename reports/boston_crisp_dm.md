@@ -7,8 +7,9 @@ Source: [Kaggle Boston Housing（課程 L7 raw CSV，selva86/datasets）](https:
 房仲與都市規劃單位想用社區層級的環境、交通、教育與社經指標，預測波士頓各區自有住宅的房價中位數（MEDV），並找出真正影響房價的關鍵因素，作為估價與政策參考。
 
 - 測試集 R² ≥ 0.65（同資料集多元線性迴歸常見水準約 0.67–0.75）
-- RMSE 低於 5（千美元），並說明誤差較大的社區
-- 在 13 個特徵中找出精簡且顯著的子集（p < 0.05、VIF < 10）
+- 測試集 RMSE < 5（千美元）
+- 所有係數顯著（p < 0.05）
+- 共線性可接受（最大 VIF < 10）
 
 ## 2. Data Understanding
 
@@ -92,6 +93,19 @@ Source: [Kaggle Boston Housing（課程 L7 raw CSV，selva86/datasets）](https:
 | kbest | 11 | lstat, rm, ptratio, indus, tax, nox, rad, crim, age, b, zn | $4.94k | $5.10k | $5.27k | 0.6211 |
 | kbest | 12 | lstat, rm, ptratio, indus, tax, nox, rad, crim, age, b, zn, dis | $4.70k | $4.86k | $4.96k | 0.6641 |
 | kbest | 13 | lstat, rm, ptratio, indus, tax, nox, rad, crim, age, b, zn, dis, chas | $4.65k | $4.83k | $4.93k | 0.6688 |
+| backward | 1 | lstat | $6.31k | $6.34k | $5.79k | 0.5429 |
+| backward | 2 | lstat, rm | $5.51k | $5.61k | $5.59k | 0.5740 |
+| backward | 3 | lstat, rm, ptratio | $5.22k | $5.30k | $5.21k | 0.6303 |
+| backward | 4 | lstat, rm, ptratio, b | $5.09k | $5.19k | $5.37k | 0.6071 |
+| backward | 5 | lstat, rm, ptratio, b, dis | $4.94k | $5.04k | $5.37k | 0.6061 |
+| backward | 6 | lstat, rm, ptratio, b, dis, nox | $4.84k | $4.92k | $5.23k | 0.6272 |
+| backward | 7 | lstat, rm, ptratio, b, dis, nox, chas | $4.77k | $4.88k | $5.19k | 0.6323 |
+| backward | 8 | lstat, rm, ptratio, b, dis, nox, chas, crim | $4.74k | $4.86k | $5.26k | 0.6230 |
+| backward | 9 | lstat, rm, ptratio, b, dis, nox, chas, crim, rad | $4.70k | $4.83k | $5.14k | 0.6398 |
+| backward | 10 | lstat, rm, ptratio, b, dis, nox, chas, crim, rad, tax | $4.68k | $4.81k | $5.05k | 0.6523 |
+| backward | 11 | lstat, rm, ptratio, b, dis, nox, chas, crim, rad, tax, zn | $4.66k | $4.82k | $4.91k | 0.6715 |
+| backward | 12 | lstat, rm, ptratio, b, dis, nox, chas, crim, rad, tax, zn, indus | $4.65k | $4.82k | $4.92k | 0.6702 |
+| backward | 13 | lstat, rm, ptratio, b, dis, nox, chas, crim, rad, tax, zn, indus, age | $4.65k | $4.83k | $4.93k | 0.6688 |
 | forward_test | 1 | lstat | $6.31k | $6.34k | $5.79k | 0.5429 |
 | forward_test | 2 | lstat, ptratio | $5.89k | $5.94k | $5.25k | 0.6238 |
 | forward_test | 3 | lstat, ptratio, rad | $5.87k | $5.92k | $5.17k | 0.6352 |
@@ -151,6 +165,7 @@ Mutual information ranking: lstat (0.667), rm (0.511), ptratio (0.483), indus (0
 
 ## 5. Evaluation
 
+- Backward elimination (p-value, lecture L6): every coefficient has p < 0.05 at k = 10.
 - Lecture-style choice (min **test** RMSE): `exhaustive_test` k=8 ['zn', 'nox', 'age', 'dis', 'rad', 'tax', 'ptratio', 'lstat'] → test RMSE $4.54k, R² 0.7191.
 - Leakage-free choice (min **5-fold CV** RMSE on training only): `exhaustive_cv` k=10 ['crim', 'chas', 'nox', 'rm', 'dis', 'rad', 'tax', 'ptratio', 'b', 'lstat'] → test RMSE $5.05k, R² 0.6523.
 
@@ -168,7 +183,16 @@ Mutual information ranking: lstat (0.667), rm (0.511), ptratio (0.483), indus (0
 | b | 0.0123 | 0.0030 | 4.144 | 4.18e-05 | [0.006, 0.018] | 1.32 |
 | lstat | -0.5102 | 0.0530 | -9.618 | 8.334e-20 | [-0.615, -0.406] | 2.55 |
 
-R² (train) 0.7483, adj. R² 0.7419, F(10, 393) = 116.84 (p = 3.85e-111); Durbin–Watson 2.131; Jarque–Bera p 1.89e-124; Breusch–Pagan p 2.93e-08.
+R² (train) 0.7483, adj. R² 0.7419, F(10, 393) = 116.84 (p = 3.85e-111); Ramsey RESET F = 74.23 (p = 4.7e-28); Durbin–Watson (original row order) 1.089; Jarque–Bera p 1.89e-124; Breusch–Pagan p 2.93e-08.
+
+Business success criteria (checked on the recommended model):
+
+| criterion | actual | result |
+|---|---|---|
+| 測試集 R² ≥ 0.65（同資料集多元線性迴歸常見水準約 0.67–0.75） | 0.6523 | met |
+| 測試集 RMSE < 5（千美元） | 5.05 | NOT met |
+| 所有係數顯著（p < 0.05） | 0.0399 | met |
+| 共線性可接受（最大 VIF < 10） | 7.09 | met |
 
 ## 6. Deployment
 

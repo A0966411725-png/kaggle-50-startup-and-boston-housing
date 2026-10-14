@@ -779,6 +779,21 @@
    "zn",
    "dis",
    "chas"
+  ],
+  "backward": [
+   "lstat",
+   "rm",
+   "ptratio",
+   "b",
+   "dis",
+   "nox",
+   "chas",
+   "crim",
+   "rad",
+   "tax",
+   "zn",
+   "indus",
+   "age"
   ]
  },
  "reference": {
@@ -1724,6 +1739,242 @@
     "test_rmse": 4.928602182665334,
     "test_r2": 0.6687594935356322,
     "test_mae": 3.1890919658878287
+   }
+  ],
+  "backward": [
+   {
+    "k": 1,
+    "features": [
+     "lstat"
+    ],
+    "train_rmse": 6.3055837818297436,
+    "train_r2": 0.5423180734793516,
+    "cv_rmse": 6.344106995325729,
+    "test_rmse": 5.789606996393182,
+    "test_r2": 0.5429180422970384,
+    "test_mae": 4.184807930623362
+   },
+   {
+    "k": 2,
+    "features": [
+     "lstat",
+     "rm"
+    ],
+    "train_rmse": 5.512880843371696,
+    "train_r2": 0.6501592679428922,
+    "cv_rmse": 5.60589228074795,
+    "test_rmse": 5.589569804715174,
+    "test_r2": 0.5739577415025858,
+    "test_mae": 3.898759721382358
+   },
+   {
+    "k": 3,
+    "features": [
+     "lstat",
+     "rm",
+     "ptratio"
+    ],
+    "train_rmse": 5.219059054240223,
+    "train_r2": 0.6864566575056517,
+    "cv_rmse": 5.302794685157014,
+    "test_rmse": 5.207202455789537,
+    "test_r2": 0.6302528487272826,
+    "test_mae": 3.3325380783240965
+   },
+   {
+    "k": 4,
+    "features": [
+     "lstat",
+     "rm",
+     "ptratio",
+     "b"
+    ],
+    "train_rmse": 5.092043031048737,
+    "train_r2": 0.7015323322669758,
+    "cv_rmse": 5.193689563316889,
+    "test_rmse": 5.367825083848837,
+    "test_r2": 0.6070904174164267,
+    "test_mae": 3.400749036921673
+   },
+   {
+    "k": 5,
+    "features": [
+     "lstat",
+     "rm",
+     "ptratio",
+     "b",
+     "dis"
+    ],
+    "train_rmse": 4.942621633500516,
+    "train_r2": 0.7187918564936052,
+    "cv_rmse": 5.0420177763809795,
+    "test_rmse": 5.374532960326929,
+    "test_r2": 0.6061078087504284,
+    "test_mae": 3.4317494502126884
+   },
+   {
+    "k": 6,
+    "features": [
+     "lstat",
+     "rm",
+     "ptratio",
+     "b",
+     "dis",
+     "nox"
+    ],
+    "train_rmse": 4.837167082324928,
+    "train_r2": 0.7306634211395873,
+    "cv_rmse": 4.918555403939382,
+    "test_rmse": 5.228983954832419,
+    "test_r2": 0.6271531070459169,
+    "test_mae": 3.4129034008789882
+   },
+   {
+    "k": 7,
+    "features": [
+     "lstat",
+     "rm",
+     "ptratio",
+     "b",
+     "dis",
+     "nox",
+     "chas"
+    ],
+    "train_rmse": 4.770661801722949,
+    "train_r2": 0.7380186222450721,
+    "cv_rmse": 4.877575059472902,
+    "test_rmse": 5.1928565731410465,
+    "test_r2": 0.6322873547889736,
+    "test_mae": 3.383316911404227
+   },
+   {
+    "k": 8,
+    "features": [
+     "lstat",
+     "rm",
+     "ptratio",
+     "b",
+     "dis",
+     "nox",
+     "chas",
+     "crim"
+    ],
+    "train_rmse": 4.742296822403642,
+    "train_r2": 0.7411246922588316,
+    "cv_rmse": 4.85737843766189,
+    "test_rmse": 5.2579097902796725,
+    "test_r2": 0.6230166483804641,
+    "test_mae": 3.425582422126091
+   },
+   {
+    "k": 9,
+    "features": [
+     "lstat",
+     "rm",
+     "ptratio",
+     "b",
+     "dis",
+     "nox",
+     "chas",
+     "crim",
+     "rad"
+    ],
+    "train_rmse": 4.7012696100858005,
+    "train_r2": 0.745584552100497,
+    "cv_rmse": 4.833135714878587,
+    "test_rmse": 5.13956546222129,
+    "test_r2": 0.6397958484876071,
+    "test_mae": 3.3574490367044256
+   },
+   {
+    "k": 10,
+    "features": [
+     "lstat",
+     "rm",
+     "ptratio",
+     "b",
+     "dis",
+     "nox",
+     "chas",
+     "crim",
+     "rad",
+     "tax"
+    ],
+    "train_rmse": 4.676051896502766,
+    "train_r2": 0.748306611988744,
+    "cv_rmse": 4.809913283494106,
+    "test_rmse": 5.0497735194933275,
+    "test_r2": 0.652271961172012,
+    "test_mae": 3.2656420568051145
+   },
+   {
+    "k": 11,
+    "features": [
+     "lstat",
+     "rm",
+     "ptratio",
+     "b",
+     "dis",
+     "nox",
+     "chas",
+     "crim",
+     "rad",
+     "tax",
+     "zn"
+    ],
+    "train_rmse": 4.655202902734933,
+    "train_r2": 0.7505460462064875,
+    "cv_rmse": 4.820466545078775,
+    "test_rmse": 4.9079983592031615,
+    "test_r2": 0.6715231799608845,
+    "test_mae": 3.149694285529664
+   },
+   {
+    "k": 12,
+    "features": [
+     "lstat",
+     "rm",
+     "ptratio",
+     "b",
+     "dis",
+     "nox",
+     "chas",
+     "crim",
+     "rad",
+     "tax",
+     "zn",
+     "indus"
+    ],
+    "train_rmse": 4.6531471541496705,
+    "train_r2": 0.7507663164689184,
+    "cv_rmse": 4.818598383403421,
+    "test_rmse": 4.917703495184445,
+    "test_r2": 0.6702228274016839,
+    "test_mae": 3.176587970763011
+   },
+   {
+    "k": 13,
+    "features": [
+     "lstat",
+     "rm",
+     "ptratio",
+     "b",
+     "dis",
+     "nox",
+     "chas",
+     "crim",
+     "rad",
+     "tax",
+     "zn",
+     "indus",
+     "age"
+    ],
+    "train_rmse": 4.6520331848801675,
+    "train_r2": 0.7508856358979673,
+    "cv_rmse": 4.829493065236924,
+    "test_rmse": 4.928602182665348,
+    "test_r2": 0.6687594935356305,
+    "test_mae": 3.1890919658878474
    }
   ],
   "forward_test": [
@@ -2837,10 +3088,49 @@
   "f_pvalue": 3.852702280897533e-111,
   "df_model": 10,
   "df_resid": 393,
-  "durbin_watson": 2.1312417442976614,
+  "durbin_watson": 1.089129114621903,
   "jarque_bera_p": 1.8861892146542464e-124,
-  "breusch_pagan_p": 2.931441673580882e-08
+  "breusch_pagan_p": 2.931441673580882e-08,
+  "reset_f": 74.23074976356223,
+  "reset_p": 4.702048127044494e-28,
+  "max_p": 0.039900764160482875,
+  "max_vif": 7.090392330230745
  },
+ "success_check": [
+  {
+   "text": "測試集 R² ≥ 0.65（同資料集多元線性迴歸常見水準約 0.67–0.75）",
+   "metric": "test_r2",
+   "op": ">=",
+   "value": 0.65,
+   "actual": 0.6522719611720029,
+   "passed": true
+  },
+  {
+   "text": "測試集 RMSE < 5（千美元）",
+   "metric": "test_rmse",
+   "op": "<",
+   "value": 5,
+   "actual": 5.049773519493394,
+   "passed": false
+  },
+  {
+   "text": "所有係數顯著（p < 0.05）",
+   "metric": "max_p",
+   "op": "<",
+   "value": 0.05,
+   "actual": 0.039900764160482875,
+   "passed": true
+  },
+  {
+   "text": "共線性可接受（最大 VIF < 10）",
+   "metric": "max_vif",
+   "op": "<",
+   "value": 10,
+   "actual": 7.090392330230745,
+   "passed": true
+  }
+ ],
+ "backward_stop": 10,
  "mutual_info": [
   {
    "feature": "lstat",
@@ -2921,14 +3211,35 @@
  "business": {
   "objective": "房仲與都市規劃單位想用社區層級的環境、交通、教育與社經指標，預測波士頓各區自有住宅的房價中位數（MEDV），並找出真正影響房價的關鍵因素，作為估價與政策參考。",
   "success": [
-   "測試集 R² ≥ 0.65（同資料集多元線性迴歸常見水準約 0.67–0.75）",
-   "RMSE 低於 5（千美元），並說明誤差較大的社區",
-   "在 13 個特徵中找出精簡且顯著的子集（p < 0.05、VIF < 10）"
+   {
+    "text": "測試集 R² ≥ 0.65（同資料集多元線性迴歸常見水準約 0.67–0.75）",
+    "metric": "test_r2",
+    "op": ">=",
+    "value": 0.65
+   },
+   {
+    "text": "測試集 RMSE < 5（千美元）",
+    "metric": "test_rmse",
+    "op": "<",
+    "value": 5
+   },
+   {
+    "text": "所有係數顯著（p < 0.05）",
+    "metric": "max_p",
+    "op": "<",
+    "value": 0.05
+   },
+   {
+    "text": "共線性可接受（最大 VIF < 10）",
+    "metric": "max_vif",
+    "op": "<",
+    "value": 10
+   }
   ]
  },
  "notes": {
   "data": "506 筆、13 個數值特徵（CHAS 為 0/1 虛擬變數，RAD 為順序指數），無缺失值。MEDV 在 50.0 有上限截斷（16 筆），LSTAT（r = −0.74）與 RM（r = +0.70）和房價最相關。B 欄位以族群比例建構，有倫理爭議（scikit-learn 1.2 已移除此資料集），這裡保留只為了和課程 L7 比較。",
-  "lecture": "課程 L7 以 selva86 的 raw CSV、train_test_split(test_size=0.2) 搭配 Lasso、MIF、RFE、SelectKBest 與 Optuna。這裡用 random_state=42，六種特徵選擇方法都跑 k = 1..13。"
+  "lecture": "課程 L7 以 selva86 的 raw CSV、train_test_split(test_size=0.2) 搭配 Lasso、MIF、RFE、SelectKBest 與 Optuna。這裡用 random_state=42，七種特徵選擇方法都跑 k = 1..13。"
  },
  "versions": {
   "pandas": "2.2.3",

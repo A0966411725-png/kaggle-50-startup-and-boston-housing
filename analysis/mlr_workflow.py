@@ -5,12 +5,14 @@ Given a problem config (CSV + target + a short business brief), this script:
   1. loads the data and profiles it                     (Data Understanding)
   2. drops NA rows, one-hot encodes nominal columns      (Data Preparation)
      with drop_first, splits train/test with sklearn
-  3. runs six feature-selection methods for k = 1..p     (Modeling)
-     Lasso, Forward SFS, RFE, ElasticNet, SelectKBest, Exhaustive
-     plus Optuna-tuned Lasso and a mutual-information ranking
+  3. runs seven feature-selection methods for k = 1..p   (Modeling)
+     Lasso, Forward SFS, RFE, ElasticNet, SelectKBest, Exhaustive,
+     Backward elimination by p-value, plus Optuna-tuned Lasso and a
+     mutual-information ranking
   4. evaluates every (method, k) with RMSE / R2 / MAE    (Evaluation)
-     on train, 5-fold CV and the held-out test set, and fits
-     the recommended model with statsmodels for inference
+     on train, 5-fold CV and the held-out test set, fits the
+     recommended model with statsmodels for inference and assumption
+     tests, and checks the business success criteria
   5. saves the model (pickle + gzip) and a JSON bundle   (Deployment)
      that the web explorer (index.html) loads; the browser
      re-computes everything and checks it against these numbers
@@ -142,6 +144,20 @@ def kbest_order(Xtr, ytr):
     return [int(j) for j in np.argsort(-F, kind="stable")]
 
 
+def backward_order(Xtr, ytr):
+    """Drop the least significant feature (largest p = smallest |t|) until one is left.
+    Returns the order and the size of the first model whose coefficients all have p < 0.05."""
+    remaining, eliminated, stop = list(range(Xtr.shape[1])), [], None
+    while remaining:
+        res = sm.OLS(ytr, sm.add_constant(Xtr[:, remaining], has_constant="add")).fit()
+        if stop is None and res.pvalues[1:].max() < 0.05:
+            stop = len(remaining)
+        if len(remaining) == 1:
+            break
+        eliminated.append(remaining.pop(int(np.argmin(np.abs(res.tvalues[1:])))))
+    return remaining + eliminated[::-1], stop
+
+
 def forward_subsets(p, score):
     chosen, out = [], []
     for _ in range(p):
@@ -172,28 +188,51 @@ def exhaustive_subsets(p, score):
 # --------------------------------------------------------------------------- #
 # Inference for the recommended model
 # --------------------------------------------------------------------------- #
-def inference(Xtr_df, ytr, names):
+def inference(Xtr_df, ytr, names, tr_idx):
     D = sm.add_constant(Xtr_df[names], has_constant="add")
     res = sm.OLS(ytr.values, D).fit()
     ci = res.conf_int(0.05)
     rows = []
     for i, nm in enumerate(["const"] + names):
-        vif = None if i == 0 or len(names) == 1 else float(variance_inflation_factor(D.values, i))
-        if i > 0 and len(names) == 1:
-            vif = 1.0
+        if i == 0:
+            vif = None
+        else:
+            vif = 1.0 if len(names) == 1 else float(variance_inflation_factor(D.values, i))
         rows.append({
             "name": nm, "coef": float(res.params.iloc[i]), "se": float(res.bse.iloc[i]),
             "t": float(res.tvalues.iloc[i]), "p": float(res.pvalues.iloc[i]),
             "ci_low": float(ci.iloc[i, 0]), "ci_high": float(ci.iloc[i, 1]), "vif": vif,
         })
+    resid = np.asarray(res.resid)
+    # Ramsey RESET with powers 2, 3 of the standardised fitted values
+    # (same column space as statsmodels linear_reset, numerically stable)
+    z = (res.fittedvalues - res.fittedvalues.mean()) / res.fittedvalues.std()
+    aug = sm.OLS(ytr.values, np.column_stack([D.values, z ** 2, z ** 3])).fit()
+    reset_f, reset_p, _ = aug.compare_f_test(res)
     return {
         "features": names, "coefficients": rows, "r2_train": float(res.rsquared),
         "adj_r2_train": float(res.rsquared_adj), "f_stat": float(res.fvalue),
         "f_pvalue": float(res.f_pvalue), "df_model": int(res.df_model), "df_resid": int(res.df_resid),
-        "durbin_watson": float(sm.stats.durbin_watson(res.resid)),
-        "jarque_bera_p": float(sm.stats.jarque_bera(res.resid)[1]),
-        "breusch_pagan_p": float(sm.stats.het_breuschpagan(res.resid, D)[1]),
+        # DW in the original row order; the shuffled split order would always give ~2
+        "durbin_watson": float(sm.stats.durbin_watson(resid[np.argsort(tr_idx)])),
+        "jarque_bera_p": float(sm.stats.jarque_bera(resid)[1]),
+        "breusch_pagan_p": float(sm.stats.het_breuschpagan(resid, D)[1]),
+        "reset_f": float(reset_f), "reset_p": float(reset_p),
+        "max_p": float(res.pvalues[1:].max()),
+        "max_vif": max(r["vif"] for r in rows[1:]),
     }
+
+
+OPS = {">=": np.greater_equal, ">": np.greater, "<=": np.less_equal, "<": np.less}
+
+
+def check_success(criteria, row, infer):
+    """Evaluate structured business success criteria against the recommended model."""
+    values = {"test_r2": row["test_r2"], "test_rmse": row["test_rmse"], "test_mae": row["test_mae"],
+              "cv_rmse": row["cv_rmse"], "k": row["k"], "max_p": infer["max_p"],
+              "max_vif": infer["max_vif"]}
+    return [dict(c, actual=float(values[c["metric"]]),
+                 passed=bool(OPS[c["op"]](values[c["metric"]], c["value"]))) for c in criteria]
 
 
 def optuna_lasso(Xs, ytr, folds):
@@ -220,6 +259,7 @@ def optuna_lasso(Xs, ytr, folds):
 
 # --------------------------------------------------------------------------- #
 def main(config_path):
+    sys.stdout.reconfigure(encoding="utf-8")
     t0 = time.time()
     cfg = json.loads(Path(config_path).read_text(encoding="utf-8"))
     raw = pd.read_csv(ROOT / cfg["csv"])
@@ -252,6 +292,7 @@ def main(config_path):
         "rfe": rfe_order(Xs, ytr),
         "kbest": kbest_order(Xtr, ytr),
     }
+    orders["backward"], backward_stop = backward_order(Xtr, ytr)
     subsets = {m: [o[:k] for k in range(1, p + 1)] for m, o in orders.items()}
     for crit, score in (("test", test_score), ("cv", cv_score)):
         subsets[f"forward_{crit}"] = forward_subsets(p, score)
@@ -273,7 +314,8 @@ def main(config_path):
                     key=lambda kr: (kr[1]["test_rmse"], kr[1]["k"]))
     rec_names = best[1]["features"]
     Xtr_df = pd.DataFrame(Xtr, columns=names)
-    infer = inference(Xtr_df, pd.Series(ytr), rec_names)
+    infer = inference(Xtr_df, pd.Series(ytr), rec_names, tr_idx)
+    success = check_success(cfg.get("business", {}).get("success", []), best[1], infer)
 
     mi = mutual_info_regression(Xtr, ytr, random_state=0)
     mi_rank = [{"feature": names[j], "mi": float(mi[j])} for j in np.argsort(-mi)]
@@ -294,7 +336,6 @@ def main(config_path):
         pickle.dump({"model": model, "features": rec_names, "target": target,
                      "encoded_columns": names, "nominal": nominal}, fh)
 
-    desc = raw.describe(include="all").T
     profile = []
     for col in raw.columns:
         s = raw[col]
@@ -324,7 +365,8 @@ def main(config_path):
         "best_by_test": {"method": best_test[0], "k": best_test[1]["k"],
                          "features": best_test[1]["features"],
                          "test_rmse": best_test[1]["test_rmse"], "test_r2": best_test[1]["test_r2"]},
-        "inference": infer, "mutual_info": mi_rank, "optuna_lasso": opt,
+        "inference": infer, "success_check": success, "backward_stop": backward_stop,
+        "mutual_info": mi_rank, "optuna_lasso": opt,
         "business": cfg.get("business", {}), "notes": cfg.get("notes", {}),
         "versions": {"pandas": pd.__version__, "numpy": np.__version__,
                      "sklearn": __import__("sklearn").__version__, "statsmodels": sm.__version__},
@@ -343,7 +385,7 @@ def main(config_path):
     write_report(bundle, ROOT / "reports" / f"{cfg['id']}_crisp_dm.md")
     print(f"[{cfg['id']}] n={len(df)} p={p} train={len(tr_idx)} test={len(te_idx)}  "
           f"({time.time() - t0:.1f}s)")
-    for key in ("forward_test", "lasso", "exhaustive_cv"):
+    for key in ("forward_test", "lasso", "backward", "exhaustive_cv"):
         if key in table:
             print(f"  {key}:")
             for r in table[key]:
@@ -351,6 +393,10 @@ def main(config_path):
                       f"CV RMSE={r['cv_rmse']:.4f}  {r['features']}")
     print(f"  recommended (min CV RMSE): {bundle['recommended']}")
     print(f"  best by test RMSE (lecture style): {bundle['best_by_test']}")
+    print(f"  backward p<0.05 stop: k={backward_stop}")
+    print(f"  RESET p={infer['reset_p']:.3g}  DW(original order)={infer['durbin_watson']:.3f}")
+    for c in success:
+        print(f"  success: {c['text']}: {c['actual']:.4g} -> {'met' if c['passed'] else 'NOT met'}")
 
 
 def fmt(v, unit):
@@ -366,7 +412,7 @@ def write_report(b, path):
              f"target `{b['target']}` · generated by `analysis/mlr_workflow.py`", ""]
     bu = b["business"]
     lines += ["## 1. Business Understanding", "", bu.get("objective", ""), ""]
-    lines += [f"- {s}" for s in bu.get("success", [])] + [""]
+    lines += [f"- {s['text']}" for s in bu.get("success", [])] + [""]
     lines += ["## 2. Data Understanding", "",
               "| column | dtype | missing | unique | mean | corr with target |", "|---|---|---|---|---|---|"]
     for c in b["profile"]:
@@ -396,6 +442,9 @@ def write_report(b, path):
               ", ".join(f"{m['feature']} ({m['mi']:.3f})" for m in b["mutual_info"]), "",
               "## 5. Evaluation", ""]
     rec, bt = b["recommended"], b["best_by_test"]
+    if b["backward_stop"]:
+        lines += [f"- Backward elimination (p-value, lecture L6): every coefficient has p < 0.05 at "
+                  f"k = {b['backward_stop']}."]
     lines += [f"- Lecture-style choice (min **test** RMSE): `{bt['method']}` k={bt['k']} "
               f"{bt['features']} → test RMSE {fmt(bt['test_rmse'], u)}, R² {bt['test_r2']:.4f}.",
               f"- Leakage-free choice (min **5-fold CV** RMSE on training only): `{rec['method']}` "
@@ -409,8 +458,14 @@ def write_report(b, path):
                      f"[{c['ci_low']:,.3f}, {c['ci_high']:,.3f}] | {vif} |")
     lines += ["", f"R² (train) {inf['r2_train']:.4f}, adj. R² {inf['adj_r2_train']:.4f}, "
                   f"F({inf['df_model']}, {inf['df_resid']}) = {inf['f_stat']:.2f} (p = {inf['f_pvalue']:.3g}); "
-                  f"Durbin–Watson {inf['durbin_watson']:.3f}; Jarque–Bera p {inf['jarque_bera_p']:.3g}; "
-                  f"Breusch–Pagan p {inf['breusch_pagan_p']:.3g}.", "",
+                  f"Ramsey RESET F = {inf['reset_f']:.2f} (p = {inf['reset_p']:.3g}); "
+                  f"Durbin–Watson (original row order) {inf['durbin_watson']:.3f}; "
+                  f"Jarque–Bera p {inf['jarque_bera_p']:.3g}; Breusch–Pagan p {inf['breusch_pagan_p']:.3g}.", "",
+              "Business success criteria (checked on the recommended model):", "",
+              "| criterion | actual | result |", "|---|---|---|"]
+    for c in b["success_check"]:
+        lines.append(f"| {c['text']} | {c['actual']:.4g} | {'met' if c['passed'] else 'NOT met'} |")
+    lines += ["",
               "## 6. Deployment", "",
               f"- `models/{b['id']}_ols.pkl.gz` (pickle + gzip) holds the recommended OLS model.",
               "- The web explorer loads this bundle, recomputes every number in the browser and "

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MLR Feature Selection Explorer</title>
-<meta name="description" content="50 Startups 與 Boston Housing 多元線性迴歸：CRISP-DM、六種特徵選擇方法、統計檢定與即時預測，也可輸入任意 CSV 資料集。">
+<meta name="description" content="50 Startups 與 Boston Housing 多元線性迴歸：CRISP-DM、七種特徵選擇方法、統計檢定與即時預測，也可輸入任意 CSV 資料集。">
 <link rel="stylesheet" href="css/style.css">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234a3aa7'/%3E%3Cpath d='M6 24 L13 15 L18 19 L26 8' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
 </head>
@@ -16,12 +16,15 @@
       <div class="crumbs">AIoT-DA · <b>HW2 Multiple Linear Regression</b> · Kaggle 50 Startups &amp; Boston Housing</div>
       <div class="brand"><h1>MLR Feature Selection Explorer</h1><span class="pill">CRISP-DM</span></div>
     </div>
-    <div class="author">陳彥愷 CHEN,YEN-KAI · DIC-2</div>
+    <div class="row">
+      <a id="repo-link" class="author hidden" target="_blank" rel="noopener">GitHub 原始碼</a>
+      <div class="author">陳彥愷 CHEN,YEN-KAI · DIC-2</div>
+    </div>
   </div>
 
   <section class="hero">
     <h2 id="hero-title">載入中…</h2>
-    <p id="hero-desc">比較六種特徵選擇演算法（Lasso、Forward SFS、RFE、ElasticNet、SelectKBest、Exhaustive Search）和 OLS 基準模型，觀察特徵數 k 對偏差與變異的影響。</p>
+    <p id="hero-desc">比較七種特徵選擇演算法（Lasso、Forward SFS、RFE、ElasticNet、SelectKBest、Exhaustive Search、Backward p 值）和 OLS 基準模型，觀察特徵數 k 對偏差與變異的影響。</p>
     <div class="badges" id="hero-badges"></div>
   </section>
 
@@ -151,7 +154,7 @@
     <section class="card" id="crisp">
       <h3>CRISP-DM 六步驟</h3>
       <p class="sub">內容依目前的問題與資料自動產生；內建問題附上 Python（scikit-learn / statsmodels）的對照結果。</p>
-      <div class="tabs" id="crisp-tabs"></div>
+      <div class="tabs" id="crisp-tabs" role="tablist"></div>
       <div class="phase" id="crisp-body"></div>
     </section>
   </div>

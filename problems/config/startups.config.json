@@ -11,7 +11,11 @@
   "csv_url": "https://gist.githubusercontent.com/GaneshSparkz/b5662effbdae8746f7f7d8ed70c42b2d/raw/faf8b1a0d58e251f48a647d3881e7a960c3f0925/50_Startups.csv",
   "target": "Profit",
   "target_label": "Profit（利潤）",
-  "unit": {"prefix": "$", "suffix": "", "decimals": 2},
+  "unit": {
+    "prefix": "$",
+    "suffix": "",
+    "decimals": 2
+  },
   "labels": {
     "R&D Spend": "R&D Spend（研發支出）",
     "Administration": "Administration（行政支出）",
@@ -25,9 +29,30 @@
   "business": {
     "objective": "創投與經營團隊想知道：新創公司的研發、行政、行銷支出與所在州別，哪些因素真正影響年度利潤？目標是建立可解釋的多元線性迴歸模型，用最少的特徵準確預測 Profit。",
     "success": [
-      "測試集 R² ≥ 0.90，RMSE 越低越好（以美元計）",
-      "模型精簡（Occam's Razor）：在誤差相近時選擇特徵較少的模型",
-      "係數具統計顯著性（p < 0.05），且無嚴重共線性（VIF < 5）"
+      {
+        "text": "測試集 R² ≥ 0.90",
+        "metric": "test_r2",
+        "op": ">=",
+        "value": 0.9
+      },
+      {
+        "text": "模型精簡（Occam's Razor）：最多 3 個特徵",
+        "metric": "k",
+        "op": "<=",
+        "value": 3
+      },
+      {
+        "text": "所有係數顯著（p < 0.05）",
+        "metric": "max_p",
+        "op": "<",
+        "value": 0.05
+      },
+      {
+        "text": "無嚴重共線性（最大 VIF < 5）",
+        "metric": "max_vif",
+        "op": "<",
+        "value": 5
+      }
     ]
   },
   "notes": {
