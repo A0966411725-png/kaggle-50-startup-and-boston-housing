@@ -608,7 +608,7 @@
     const hi = state.k - 1;
     const ss = sweetSpot(rows);
     $("rmse-title").textContent = `RMSE vs 特徵數 k · ${m.name}`;
-    $("rmse-sub").textContent = `Training / Test curve（L6 Step 4）：畫出 k = 1…${P.p} 的整條曲線，切換 k 只會移動紫色標示。測試 RMSE 在 k=${sweetSpot(rows, "test").k} 最低，CV RMSE 在 k=${sweetSpot(rows, "cv").k} 最低。`;
+    $("rmse-sub").textContent = `Training / Test curve（L6 Step 4）：訓練誤差隨 k 下降；測試 RMSE 在 k=${sweetSpot(rows, "test").k} 最低，CV RMSE 在 k=${sweetSpot(rows, "cv").k} 最低。`;
     $("rmse-legend").innerHTML = legendHTML([["Test RMSE", col], ["5-fold CV RMSE", col, "dash"], ["Train RMSE", col, "dot"]]);
     drawChart("chart-rmse", {
       type: "line",
