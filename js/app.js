@@ -28,7 +28,7 @@
     { text: "共線性可接受（最大 VIF < 10）", metric: "max_vif", op: "<", value: 10 },
   ];
   // Set to the GitHub repository URL after the repo is created; shows a link in the header.
-  const REPO_URL = "";
+  const REPO_URL = "https://github.com/A0966411725-png/kaggle-50-startup-and-boston-housing";
   const SAMPLES = [
     ["50 Startups", "https://raw.githubusercontent.com/Avik-Jain/100-Days-Of-ML-Code/master/datasets/50_Startups.csv"],
     ["Boston Housing", "https://raw.githubusercontent.com/selva86/datasets/master/BostonHousing.csv"],
