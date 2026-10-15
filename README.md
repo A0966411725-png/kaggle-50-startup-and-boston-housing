@@ -2,6 +2,10 @@
 
 **MLR Feature Selection Explorer**：用 CRISP-DM 解兩個多元線性迴歸問題，做成可互動的 GitHub Pages 網站。
 
+[![網站截圖：50 Startups 頁面](docs/screenshot-startups-top.png)](https://a0966411725-png.github.io/kaggle-50-startup-and-boston-housing/)
+
+完整頁面截圖：[Problem 1 · 50 Startups](docs/screenshot-startups-full.png) · [Problem 2 · Boston Housing](docs/screenshot-boston-full.png)
+
 🌐 **網站**：https://a0966411725-png.github.io/kaggle-50-startup-and-boston-housing/
 
 📦 **原始碼**：https://github.com/A0966411725-png/kaggle-50-startup-and-boston-housing
